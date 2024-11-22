@@ -117,7 +117,7 @@ body {
 ***REMOVED***
 
 .header {
-    background-color: #f8f9fa;
+    background-color: #f6f7fb;
   ***REMOVED***
     text-align: center;
   ***REMOVED***
