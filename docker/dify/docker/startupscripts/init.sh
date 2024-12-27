@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-DB_INITIALISED="/opt/oracle/oradata/dbinit"
-#[ -f ${DB_INITIALISED***REMOVED*** ] && exit
-#touch ${DB_INITIALISED***REMOVED***
-if [ -f ${DB_INITIALISED***REMOVED*** ]; then
+DB_INITIALIZED="/opt/oracle/oradata/dbinit"
+#[ -f ${DB_INITIALIZED***REMOVED*** ] && exit
+#touch ${DB_INITIALIZED***REMOVED***
+if [ -f ${DB_INITIALIZED***REMOVED*** ]; then
   echo 'File exists. Standards for have been Init'
   exit
 else
-  echo 'File does not exist. Standards for first time Strart up this DB'
+  echo 'File does not exist. Standards for first time Start up this DB'
   "$ORACLE_HOME"/bin/sqlplus -s "/ as sysdba" @"/opt/oracle/scripts/startup/init_user.script"; 
-  touch ${DB_INITIALISED***REMOVED***
+  touch ${DB_INITIALIZED***REMOVED***
 fi
