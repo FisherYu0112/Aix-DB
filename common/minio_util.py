@@ -6,7 +6,8 @@ from minio import Minio
 import traceback
 from sanic import Request
 from constants.code_enum import SysCodeEnum as SysCode
-
+from uuid import uuid4
+import mimetypes
 from common.exception import MyException
 
 
@@ -69,6 +70,47 @@ class MinioUtils:
         except Exception as err:
             traceback.print_exception(err***REMOVED***
             raise MyException(SysCode.c_9999***REMOVED***
+
+    def upload_to_minio_form_stream(self, file_stream, bucket_name="filedata", file_name=None***REMOVED***:
+        """
+        将给定的字节流上传到MinIO，并返回上传文件的键（key）。
+
+        :param file_stream: 文件的字节流 (BytesIO***REMOVED***
+        :param bucket_name: MinIO存储桶名称
+        :param file_name: 上传文件的名称（可选）
+        :return: 上传文件的键（key）或None如果上传失败
+        """
+        # 初始化MinIO客户端
+        client = self._build_client(***REMOVED***
+
+        try:
+            # 确保存储桶存在
+            if not client.bucket_exists(bucket_name***REMOVED***:
+                client.make_bucket(bucket_name***REMOVED***
+
+            # 如果没有提供文件名，则生成一个唯一的文件名
+            if not file_name:
+                file_extension = mimetypes.guess_extension(mimetypes.guess_type(file_stream.getvalue(***REMOVED******REMOVED***[0]***REMOVED*** or ""
+                file_name = f"{uuid4(***REMOVED******REMOVED***{file_extension***REMOVED***"
+
+            # 确保从流的开始位置读取数据
+            file_stream.seek(0***REMOVED***
+
+            # 获取文件大小
+            file_length = len(file_stream.getvalue(***REMOVED******REMOVED***
+
+            # 获取文件的MIME类型
+            content_type, _ = mimetypes.guess_type(file_name***REMOVED*** or ("application/octet-stream", None***REMOVED***
+
+            # 上传文件流到MinIO
+            client.put_object(bucket_name, file_name, file_stream, file_length, content_type=content_type***REMOVED***
+
+            logging.info(f"File uploaded successfully with key: {file_name***REMOVED***"***REMOVED***
+            return file_name  # 返回上传文件的键（key）
+
+        except Exception as e:
+            logging.error(f"An error occurred while uploading to MinIO: {e***REMOVED***"***REMOVED***
+            return None
 
     def get_file_url_by_key(self, bucket_name="filedata", object_key=None***REMOVED***:
         """

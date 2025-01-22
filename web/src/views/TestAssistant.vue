@@ -4,6 +4,8 @@ import { Transformer ***REMOVED*** from 'markmap-lib'
 import { Markmap ***REMOVED*** from 'markmap-view'
 import { Toolbar ***REMOVED*** from 'markmap-toolbar'
 import * as GlobalAPI from '@/api'
+import PdfViewer from './PdfViewer.vue'
+
 const transformer = new Transformer(***REMOVED***
 const initValue = ref(
     `# 大模型测试助手\n1. 上传需求文档\n2. 模型抽取需求\n3. 生成测试用例\n4. 导出测试用例`
@@ -24,7 +26,7 @@ onMounted((***REMOVED*** => {
     mm.value = Markmap.create(svgRef.value, {
         autoFit: true, // 布尔值，如果为true，则自动调整视图以适应容器大小
         // color: (node***REMOVED*** => '#8276f2', // 函数，根据节点返回颜色字符串
-        duration: 1000, // 数字，动画持续时间，单位毫秒
+        duration: 500, // 数字，动画持续时间，单位毫秒
         embedGlobalCSS: true, // 布尔值，是否嵌入全局CSS样式
         fitRatio: 1, // 数字，适配比例，用于调整自动缩放的程度
         // initialExpandLevel: 1, // 数字，初始展开层级，决定首次加载时展开的节点深度
@@ -126,6 +128,7 @@ function handleDocClick(***REMOVED*** {
     ***REMOVED******REMOVED***
 ***REMOVED***
 
+const pdfUrl = ref(***REMOVED***
 // 侧边栏对话历史
 interface TableItem {
     id: number
@@ -136,9 +139,43 @@ const tableRef = ref(null***REMOVED***
 // 表格行点击事件
 const rowProps = (row: any***REMOVED*** => {
 ***REMOVED***
-        onClick: (***REMOVED*** => {***REMOVED***
+        onClick: (***REMOVED*** => {
+            initValue.value = row.markdown
+            pdfUrl.value = row.file_url
+            update(***REMOVED***
+        ***REMOVED***
     ***REMOVED***
 ***REMOVED***
+
+interface RefDocsItem {
+    filename: string
+    url: string
+    page_no: number
+    content_pos: {
+        page_no: number
+        left_top: {
+            x: number
+            y: number
+        ***REMOVED***
+        right_bottom: {
+            x: number
+            y: number
+        ***REMOVED***
+    ***REMOVED***[]
+***REMOVED***
+// 准备好要传递给子组件的数据
+const pdfDocument = ref<RefDocsItem>({
+    filename: 'example.pdf',
+    url: 'http://localhost:19000/filedata/%E6%B2%B3%E5%8D%97%E9%9C%80%E6%B1%82.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=sIR5eeDkiwoo779yNJbw%2F20250120%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250120T071545Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=9e960555d54e0d35750297fc83b328b5c15ec81dcf8d8a45f987cbf47cd05dbe', // 替换为实际的PDF文件URL
+    page_no: 1, // 指定要打开的页码
+    content_pos: [
+      ***REMOVED***
+            page_no: 1,
+            left_top: { x: 0, y: 0 ***REMOVED***,
+            right_bottom: { x: 612, y: 792 ***REMOVED*** // A4纸大小的默认尺寸
+        ***REMOVED***
+***REMOVED***
+***REMOVED******REMOVED***
 ***REMOVED***
 
 ***REMOVED***
@@ -294,31 +331,52 @@ const rowProps = (row: any***REMOVED*** => {
                         :show="loading"
                         :rotate="false"
                         class="bg-#ffffff"
-                        :style="{
-                            '--n-opacity-spinning': '0'
-                        ***REMOVED***"
+                        :style="{ '--n-opacity-spinning': '0' ***REMOVED***"
           ***REMOVED***
                         <div
                             ref="container"
                             style="
                               ***REMOVED***
-                                justify-content: center; /* 水平居中 */
-                                align-items: center; /* 垂直居中 */
-                              ***REMOVED*** /* 确保父元素有高度 */
-                              ***REMOVED*** /* 确保父元素有宽度 */
+                                justify-content: center;
+                                align-items: center;
+                              ***REMOVED***
+                              ***REMOVED***
                                 background-color: #f6f7fb;
                             "
               ***REMOVED***
-                            <svg
-                                ref="svgRef"
-                                style="height: 100%; width: 100%"
-                  ***REMOVED***</svg>
+                            <!-- 左边面板：显示 PDF -->
+                            <div
+                                style="
+                                    width: 50%; /* 左边面板占 50% 宽度 */
+                                  ***REMOVED***
+                                    background-color: #f6f7fb;
+                                "
+                  ***REMOVED***
+                                <!-- 使用子组件并传递 dcsInfo 数据 -->
+                                <PdfViewer :dcsInfo="pdfDocument" />
+                ***REMOVED***
+
+                            <!-- 右边面板：保持不变 -->
+                            <div
+                                style="
+                                    width: 50%; /* 右边面板占 50% 宽度 */
+                                  ***REMOVED***
+                                    background-color: #f6f7fb;
+                                  ***REMOVED***
+                                    justify-content: center;
+                                    align-items: center;
+                                "
+                  ***REMOVED***
+                                <svg
+                                    ref="svgRef"
+                                    style="height: 100%; width: 100%"
+                      ***REMOVED***</svg>
+                ***REMOVED***
             ***REMOVED***
                     </n-spin>
                 </n-layout-content>
           ***REMOVED***
         </n-space>
-        <!-- 隐藏的文件上传按钮 -->
         <n-upload
             ref="uploadDocRef"
             type="button"
@@ -379,3 +437,53 @@ const rowProps = (row: any***REMOVED*** => {
     margin: 0px 0px 12px;
 ***REMOVED***
 ***REMOVED***
+<!-- 
+***REMOVED***
+    <div class="docWrap">
+        <div ref="wordFile"></div>
+***REMOVED***
+***REMOVED***
+
+<script setup>
+***REMOVED***
+import { renderAsync ***REMOVED*** from 'docx-preview'
+
+const wordFile = ref(null***REMOVED***
+const docUrl = ref(
+    'http://localhost:19000/filedata/input.docx?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=sIR5eeDkiwoo779yNJbw%2F20250119%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250119T121316Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=d5c58187581cf74e7a628c54c8c8b12071eb49f689bd3b74933f0d6883102843'
+***REMOVED*** // 替换为你的Word文档URL
+
+onMounted((***REMOVED*** => {
+    const xhr = new XMLHttpRequest(***REMOVED***
+    xhr.open('get', docUrl.value***REMOVED***
+    xhr.responseType = 'blob'
+    xhr.onload = function (***REMOVED*** {
+        const blob = new window.Blob([xhr.response], {
+            type: 'application/docx'
+        ***REMOVED******REMOVED***
+        renderAsync(blob, wordFile.value***REMOVED***.then((***REMOVED*** => {
+            // 添加事件监听
+            wordFile.value.addEventListener('mouseup', handleSelection***REMOVED***
+            wordFile.value.addEventListener('keyup', handleSelection***REMOVED***
+        ***REMOVED******REMOVED***
+    ***REMOVED***
+    xhr.send(***REMOVED***
+***REMOVED******REMOVED***
+
+const handleSelection = (***REMOVED*** => {
+    const selection = window.getSelection(***REMOVED***
+    const selectedText = selection.toString(***REMOVED***.trim(***REMOVED***
+    if (selectedText***REMOVED*** {
+        console.log('选中的内容:', selectedText***REMOVED***
+        // 可以在这里触发其他事件或进行其他操作
+    ***REMOVED***
+***REMOVED***
+***REMOVED***
+
+***REMOVED***
+.docWrap {
+  ***REMOVED***
+  ***REMOVED***
+    overflow: auto;
+***REMOVED***
+***REMOVED*** -->

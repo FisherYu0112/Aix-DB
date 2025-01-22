@@ -23,7 +23,7 @@ const routes: Array<RouteRecordRaw> = [
   ***REMOVED***
         path: '/testAssitant',
         name: 'TestAssitant',
-        component: (***REMOVED*** => import('@/views/TestAssistant.vue'***REMOVED***,
+        component: (***REMOVED*** => import('@/views/DemandManager.vue'***REMOVED***,
         meta: { requiresAuth: true ***REMOVED*** // 标记需要认证
     ***REMOVED***
 ]
