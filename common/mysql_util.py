@@ -66,17 +66,30 @@ class MysqlUtil:
         conn.close(***REMOVED***
         return result
 
-    def insert(self, sql: str, params: []***REMOVED***:
+    def insert(self, sql: str, params: tuple***REMOVED***:
+        """
+
+        :param sql:
+        :param params:
+        :return:
+        """
         conn = self._get_connect(***REMOVED***
-        cursor = conn.cursor(***REMOVED***
-        cursor.execute(sql, params***REMOVED***
-        data = cursor.fetchall(***REMOVED***
-        conn.commit(***REMOVED***
-        cursor.close(***REMOVED***
-        conn.close(***REMOVED***
-        return data
+        try:
+            with conn.cursor(***REMOVED*** as cursor:
+                cursor.execute(sql, params***REMOVED***
+                inserted_id = cursor.lastrowid  # 获取插入记录的 ID
+            conn.commit(***REMOVED***
+        finally:
+            conn.close(***REMOVED***
+        return inserted_id
 
     def update_params(self, sql: str, params: []***REMOVED***:
+        """
+
+        :param sql:
+        :param params:
+        :return:
+        """
         # 获得链接
         conn = self._get_connect(***REMOVED***
         # 获得游标
@@ -94,6 +107,11 @@ class MysqlUtil:
         return result
 
     def update(self, sql: str***REMOVED***:
+        """
+
+        :param sql:
+        :return:
+        """
         # 获得链接
         conn = self._get_connect(***REMOVED***
         # 获得游标
