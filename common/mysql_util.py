@@ -316,3 +316,31 @@ class MysqlUtil:
         finally:
             if connection:
                 connection.close(***REMOVED***
+
+    def batch_insert(self, sql: str, data_list: list***REMOVED***:
+        """
+        执行批量插入操作。
+
+        :param sql: 插入语句模板，其中应包含占位符(%s***REMOVED***，用于后续的数据填充。
+        :param data_list: 包含要插入数据的列表，每个元素都是一个元组或列表，
+                          对应于单次插入操作中的所有字段值。
+        :return: 成功时返回True，失败时抛出异常。
+        """
+        conn = None
+        try:
+            # 获得链接
+            conn = self._get_connect(***REMOVED***
+            # 获得游标
+            with conn.cursor(***REMOVED*** as cursor:
+                # 使用 executemany 方法进行批量插入
+                cursor.executemany(sql, data_list***REMOVED***
+            # 提交事务
+            conn.commit(***REMOVED***
+            return True
+        except pymysql.MySQLError as e:
+            logger.error(f"batch_insert error {e***REMOVED***"***REMOVED***
+            conn.rollback(***REMOVED***  # 发生错误时回滚事务
+            raise  # 抛出异常给调用者处理
+        finally:
+            if conn:
+                conn.close(***REMOVED***
