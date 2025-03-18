@@ -50,7 +50,6 @@ declare module 'vue' {
     NSpace: typeof import('naive-ui'***REMOVED***['NSpace']
     NSpin: typeof import('naive-ui'***REMOVED***['NSpin']
     NSplit: typeof import('naive-ui'***REMOVED***['NSplit']
-    NTable: typeof import('naive-ui'***REMOVED***['NTable']
     NTag: typeof import('naive-ui'***REMOVED***['NTag']
     NTooltip: typeof import('naive-ui'***REMOVED***['NTooltip']
     NUpload: typeof import('naive-ui'***REMOVED***['NUpload']
