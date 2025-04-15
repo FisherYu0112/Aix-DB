@@ -22,6 +22,10 @@ const handleClickChat = (index***REMOVED*** => {
     router.push('/chat'***REMOVED***
 ***REMOVED***
 
+const handleClick = (***REMOVED*** => {
+    router.push('/mcpChat'***REMOVED***
+***REMOVED***
+
 // 使用ref定义响应式的selectedIndex
 const selectedIndex = ref(0***REMOVED***
 onMounted((***REMOVED*** => {
@@ -193,6 +197,7 @@ onMounted((***REMOVED*** => {
                             <div
                                 class="icon-button"
                                 style="margin-bottom: 10px"
+                                @click="handleClick(***REMOVED***"
                   ***REMOVED***
                                 <n-icon size="25" class="icon">
                                     <svg
