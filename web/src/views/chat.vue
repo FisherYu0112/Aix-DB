@@ -1,6 +1,7 @@
 <script lang="tsx" setup>
 import { isMockDevelopment ***REMOVED*** from '@/config'
 import { scrollbarProps, type InputInst ***REMOVED*** from 'naive-ui'
+import { useTemplateRef ***REMOVED*** from 'vue'
 import { useRouter ***REMOVED*** from 'vue-router'
 import { UAParser ***REMOVED*** from 'ua-parser-js'
 import TableModal from './TableModal.vue'
@@ -27,7 +28,8 @@ onMounted((***REMOVED*** => {
         isInit,
         conversationItems,
         tableData,
-        currentRenderIndex
+        currentRenderIndex,
+        ''
     ***REMOVED***
 ***REMOVED******REMOVED***
 
@@ -44,7 +46,8 @@ function handleModalClose(value***REMOVED*** {
         isInit,
         conversationItems,
         tableData,
-        currentRenderIndex
+        currentRenderIndex,
+        ''
     ***REMOVED***
 ***REMOVED***
 
@@ -471,7 +474,8 @@ const rowProps = (row: any***REMOVED*** => {
                     isInit,
                     conversationItems,
                     tableData,
-                    currentRenderIndex
+                    currentRenderIndex,
+                    ''
                 ***REMOVED***
             ***REMOVED***
 
@@ -481,7 +485,8 @@ const rowProps = (row: any***REMOVED*** => {
                         isInit,
                         conversationItems,
                         tableData,
-                        currentRenderIndex
+                        currentRenderIndex,
+                        ''
                     ***REMOVED***
                 ***REMOVED***
                 //关闭默认页面
@@ -527,7 +532,8 @@ const scrollToItem = (index: number***REMOVED*** => {
             isInit,
             conversationItems,
             tableData,
-            currentRenderIndex
+            currentRenderIndex,
+            ''
         ***REMOVED***
     ***REMOVED***
 
@@ -647,6 +653,38 @@ const hideScrollbar = (***REMOVED*** => {
             'hidden'
     ***REMOVED***
 ***REMOVED***
+
+const searchText = ref(''***REMOVED***
+const searchChatRef = useTemplateRef('searchChatRef'***REMOVED***
+const isFocusSearchChat = ref(false***REMOVED***
+const onFocusSearchChat = (***REMOVED*** => {
+    isFocusSearchChat.value = true
+    nextTick((***REMOVED*** => {
+        searchChatRef.value?.focus(***REMOVED***
+    ***REMOVED******REMOVED***
+***REMOVED***
+const onBlurSearchChat = (***REMOVED*** => {
+    if (searchText.value***REMOVED*** return
+    isFocusSearchChat.value = false
+***REMOVED***
+
+// 在script部分添加搜索处理函数
+const handleSearch = (***REMOVED*** => {
+    tableData.value = []
+    fetchConversationHistory(
+        isInit,
+        conversationItems,
+        tableData,
+        currentRenderIndex,
+        searchText.value
+    ***REMOVED***
+***REMOVED***
+
+const handleClear = (***REMOVED*** => {
+    if (!showDefaultPage.value***REMOVED*** {
+        newChat(***REMOVED***
+    ***REMOVED***
+***REMOVED***
 ***REMOVED***
 ***REMOVED***
     <LayoutCenterPanel :loading="loading">
@@ -674,7 +712,7 @@ const hideScrollbar = (***REMOVED*** => {
                     @mouseleave="hideScrollbar"
       ***REMOVED***
                     <n-layout-header
-                        class="header"
+                        class="header p-20"
                         style="
                           ***REMOVED*** /* 使用Flexbox布局 */
                             align-items: center; /* 垂直居中对齐 */
@@ -685,38 +723,47 @@ const hideScrollbar = (***REMOVED*** => {
                             z-index: 1;
                         "
           ***REMOVED***
-                        <n-button
-                            type="primary"
-                            icon-placement="left"
-                            color="#5e58e7"
-                            @click="newChat"
-                            strong
-                            style="
-                                width: 168px;
-                                height: 36px;
-                                margin-top: 20px;
-                                margin-left: 20px;
-                              ***REMOVED***
-                                margin-bottom: 20px;
-                                text-align: center;
-                                font-family: Arial;
-                                font-weight: bold;
-                                font-size: 14px;
-                                border-radius: 20px;
-                            "
+                        <div
+                            class="create-chat-box"
+                            :class="{
+                                hide: isFocusSearchChat
+                            ***REMOVED***"
               ***REMOVED***
-                            <template #icon>
-                                <n-icon style="margin-right: 5px">
-                          ***REMOVED***class="i-hugeicons:add-01"></div>
-                                </n-icon>
-                            ***REMOVED***
-                            新建对话
-                        </n-button>
-              ***REMOVED***class="icon-button">
-                            <n-icon size="17" class="icon">
-                      ***REMOVED***class="i-hugeicons:search-01"></div>
-                            </n-icon>
+                            <n-button
+                                type="primary"
+                                icon-placement="left"
+                                color="#5e58e7"
+                                @click="newChat"
+                                strong
+                                class="create-chat"
+                  ***REMOVED***
+                                <template #icon>
+                                    <n-icon>
+                              ***REMOVED***class="i-hugeicons:add-01"></div>
+                                    </n-icon>
+                                ***REMOVED***
+                                新建对话
+                            </n-button>
             ***REMOVED***
+                        <n-input
+                            v-model:value="searchText"
+                            ref="searchChatRef"
+                            placeholder="搜索"
+                            class="search-chat"
+                            clearable
+                            @click="onFocusSearchChat(***REMOVED***"
+                            @blur="onBlurSearchChat(***REMOVED***"
+                            @input="handleSearch(***REMOVED***"
+                            @keyup.enter="handleSearch(***REMOVED***"
+                            @clear="handleClear(***REMOVED***"
+                            :class="{
+                                focus: isFocusSearchChat
+                            ***REMOVED***"
+              ***REMOVED***
+                            <template #prefix>
+                      ***REMOVED***class="i-hugeicons:search-01"></div>
+                            ***REMOVED***
+                        </n-input>
                     </n-layout-header>
                     <n-layout-content class="content">
                         <n-data-table
@@ -846,8 +893,21 @@ const hideScrollbar = (***REMOVED*** => {
                                         :bordered="false"
                                         :round="true"
                                         :style="{
-                                            fontSize: '14px',
-                                            fontFamily: 'PMingLiU'
+                                            fontSize: '15px',
+                                            fontFamily: 'PMingLiU !important',
+                                            color: '#26244c',
+                                            'max-width': '900px',
+                                            'text-align': 'left',
+                                            padding: '5px 18px',
+                                            height: 'auto',
+                                            // 允许长单词换行到下一行
+                                            'word-wrap': 'break-word',
+                                            // 允许在单词内换行
+                                            'word-break': 'break-all',
+                                            // 移除默认的 white-space 属性，确保文本能正常换行
+                                            'white-space': 'normal',
+                                            // 强制应用样式
+                                            overflow: 'visible !important'
                                         ***REMOVED***"
                                         :color="{
                                             color: '#e0dfff',
@@ -1123,8 +1183,8 @@ const hideScrollbar = (***REMOVED*** => {
                                 style="
                                   ***REMOVED***
                                     gap: 10px;
+                                    height: 40px;
                                     margin-left: 10%;
-                                    margin-bottom: 5px;
                                 "
                   ***REMOVED***
                                 <n-button
@@ -1135,15 +1195,15 @@ const hideScrollbar = (***REMOVED*** => {
                                     @click="onAqtiveChange('COMMON_QA'***REMOVED***"
                                     style="
                                         border-radius: 100px;
-                                        width: 100px;
+                                        width: 120px;
+                                        height: 36px;
                                         padding: 15px;
-                                        height: 20px;
-                                        font-size: 12px;
+                                        font-size: 13px;
                                         color: #585a73;
                                     "
                       ***REMOVED***
                                     <template #icon>
-                                        <n-icon size="14">
+                                        <n-icon size="16">
                                             <svg
                                                 t="1742194713465"
                                                 class="icon"
@@ -1172,15 +1232,15 @@ const hideScrollbar = (***REMOVED*** => {
                                     @click="onAqtiveChange('DATABASE_QA'***REMOVED***"
                                     style="
                                         border-radius: 100px;
-                                        width: 100px;
+                                        width: 120px;
+                                        height: 36px;
                                         padding: 15px;
-                                        height: 20px;
-                                        font-size: 12px;
+                                        font-size: 13px;
                                         color: #585a73;
                                     "
                       ***REMOVED***
                                     <template #icon>
-                                        <n-icon>
+                                        <n-icon size="20">
                                             <svg
                                                 t="1732505379377"
                                                 class="icon"
@@ -1209,15 +1269,15 @@ const hideScrollbar = (***REMOVED*** => {
                                     @click="onAqtiveChange('FILEDATA_QA'***REMOVED***"
                                     style="
                                         border-radius: 100px;
-                                        width: 100px;
+                                        width: 120px;
+                                        height: 36px;
                                         padding: 15px;
-                                        height: 20px;
-                                        font-size: 12px;
+                                        font-size: 13px;
                                         color: #585a73;
                                     "
                       ***REMOVED***
                                     <template #icon>
-                                        <n-icon>
+                                        <n-icon size="20">
                                             <svg
                                                 t="1732505460059"
                                                 class="icon"
@@ -1251,15 +1311,15 @@ const hideScrollbar = (***REMOVED*** => {
                                     @click="onAqtiveChange('REPORT_QA'***REMOVED***"
                                     style="
                                         border-radius: 100px;
-                                        width: 100px;
+                                        width: 120px;
+                                        height: 36px;
                                         padding: 15px;
-                                        height: 20px;
-                                        font-size: 12px;
+                                        font-size: 13px;
                                         color: #585a73;
                                     "
                       ***REMOVED***
                                     <template #icon>
-                                        <n-icon>
+                                        <n-icon size="18">
                                             <svg
                                                 t="1732528323504"
                                                 class="icon"
@@ -1384,7 +1444,7 @@ const hideScrollbar = (***REMOVED*** => {
                 ***REMOVED***
                             <n-float-button
                                 position="absolute"
-                                top="58%"
+                                top="60%"
                                 right="11.5%"
                                 :type="stylizingLoading ? 'primary' : 'default'"
                                 color
@@ -1413,6 +1473,41 @@ const hideScrollbar = (***REMOVED*** => {
 ***REMOVED***
 
 <style lang="scss" scoped>
+.create-chat-box {
+    width: 168px;
+    overflow: hidden;
+    transition: all 0.3s;
+  ***REMOVED***
+    &.hide {
+        width: 0;
+        margin-right: 0;
+    ***REMOVED***
+***REMOVED***
+
+.create-chat {
+  ***REMOVED***
+    height: 36px;
+    text-align: center;
+    font-family: Arial;
+    font-weight: bold;
+    font-size: 14px;
+    border-radius: 20px;
+***REMOVED***
+.search-chat {
+    width: 36px;
+    height: 36px;
+    text-align: center;
+    font-family: Arial;
+    font-weight: bold;
+    font-size: 14px;
+    border-radius: 50%;
+  ***REMOVED***
+    &.focus {
+      ***REMOVED***
+        border-radius: 20px;
+    ***REMOVED***
+***REMOVED***
+
 .scrollable-container {
   ***REMOVED*** // 添加纵向滚动条
     max-height: calc(

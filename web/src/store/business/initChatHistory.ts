@@ -88,7 +88,8 @@ export const fetchConversationHistory = async function fetchConversationHistory(
         ***REMOVED***>
     >,
     tableData: Ref<TableItem[]>,
-    currentRenderIndex: Ref<number>
+    currentRenderIndex: Ref<number>,
+    searchText: string
 ***REMOVED*** {
   ***REMOVED***
         //初始化对话历史记录
@@ -97,7 +98,7 @@ export const fetchConversationHistory = async function fetchConversationHistory(
         // 清空现有的 conversationItems
         conversationItems.value = []
 
-        const res = await GlobalAPI.query_user_qa_record(1, 999999***REMOVED***
+        const res = await GlobalAPI.query_user_qa_record(1, 999999, searchText***REMOVED***
         if (res.status == 401***REMOVED*** {
             userStore.logout(***REMOVED***
             setTimeout((***REMOVED*** => {

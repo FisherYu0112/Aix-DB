@@ -49,8 +49,9 @@ async def query_user_qa_record(request***REMOVED***:
     """
     page = int(request.json.get("page", 1***REMOVED******REMOVED***
     limit = int(request.json.get("limit", 10***REMOVED******REMOVED***
+    search_text = request.json.get("search_text"***REMOVED***
     user_info = await get_user_info(request***REMOVED***
-    return await query_user_record(user_info["id"], page, limit***REMOVED***
+    return await query_user_record(user_info["id"], page, limit, search_text***REMOVED***
 
 
 @bp.post("/delete_user_record"***REMOVED***

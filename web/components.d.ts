@@ -37,7 +37,6 @@ declare module 'vue' {
     NFormItem: typeof import('naive-ui'***REMOVED***['NFormItem']
     NIcon: typeof import('naive-ui'***REMOVED***['NIcon']
     NInput: typeof import('naive-ui'***REMOVED***['NInput']
-    NLabel: typeof import('naive-ui'***REMOVED***['NLabel']
     NLayout: typeof import('naive-ui'***REMOVED***['NLayout']
     NLayoutContent: typeof import('naive-ui'***REMOVED***['NLayoutContent']
     NLayoutFooter: typeof import('naive-ui'***REMOVED***['NLayoutFooter']

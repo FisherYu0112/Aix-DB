@@ -67,7 +67,7 @@ export async function login(username, password***REMOVED*** {
  * @param limit
  * @returns
  */
-export async function query_user_qa_record(page, limit***REMOVED*** {
+export async function query_user_qa_record(page, limit, search_text***REMOVED*** {
     const userStore = useUserStore(***REMOVED***
     const token = userStore.getUserToken(***REMOVED***
     const url = new URL(`${location.origin***REMOVED***/sanic/user/query_user_record`***REMOVED***
@@ -80,7 +80,8 @@ export async function query_user_qa_record(page, limit***REMOVED*** {
         ***REMOVED***,
   ***REMOVED***
             page,
-            limit
+            limit,
+            search_text
         ***REMOVED******REMOVED***
     ***REMOVED******REMOVED***
     return fetch(req***REMOVED***
