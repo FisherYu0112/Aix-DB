@@ -65,7 +65,10 @@ const messages = ref(''***REMOVED***
 const connectionStatus = ref('Disconnected'***REMOVED***
 //https://github.com/modelcontextprotocol/typescript-sdk
 // StdioClientTransport
-***REMOVED***new URL('http://localhost:8000/sse'***REMOVED******REMOVED***
+// 如果是本地开发，需要使用 localhost 来访问宿主机的mcp服务
+***REMOVED***
+    new URL('http://host.docker.internal:8000/sse'***REMOVED***
+***REMOVED***
 
 ***REMOVED***
   ***REMOVED***
