@@ -1,1 +1,4 @@
+*.ts linguist-language=TypeScript
+*.js linguist-language=TypeScript
+*.html linguist-language=TypeScript
 models/**/blobs/* filter=lfs diff=lfs merge=lfs -text
