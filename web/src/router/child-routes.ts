@@ -16,12 +16,12 @@ const childrenRoutes: Array<RouteRecordRaw> = [
       },
     ],
   },
-  {
-    path: 'testAssitant',
-    name: 'TestAssitant',
-    component: () => import('@/views/DemandManager.vue'),
-    meta: { requiresAuth: true }, // 标记需要认证
-  },
+  // {
+  //   path: 'testAssitant',
+  //   name: 'TestAssitant',
+  //   component: () => import('@/views/DemandManager.vue'),
+  //   meta: { requiresAuth: true }, // 标记需要认证
+  // },
   {
     path: 'uaDetail/:id',
     name: 'UaDetail',
@@ -37,7 +37,7 @@ const childrenRoutes: Array<RouteRecordRaw> = [
   {
     path: 'mcpChat',
     name: 'McpChat',
-    component: () => import('@/views/mcp/ToolAgent.vue'),
+    component: () => import('@/views/mcp/MCPClient.vue'),
     meta: { requiresAuth: true }, // 标记需要认证
   },
 ]
