@@ -113,7 +113,7 @@ docker compose up -d mcphub
 ```
 
 2. **MCP-HUB配置**
-- [登录MCP-HU](Bhttp://localhost:3300/) admin/admin123
+- [登录MCP-HU](http://localhost:3300/) admin/admin123
 - 安装CMP工具
 ![image](./docker/images/mcp-01.png)
 
