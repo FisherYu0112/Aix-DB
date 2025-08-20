@@ -76,7 +76,7 @@ function close() {
   pagination.value.page = 1
 }
 
-const rowKey = (row) => row.id
+const rowKey = (row) => row.chat_id
 
 function handleCheck(rowKeys) {
   checkedRowKeys.value = rowKeys
@@ -153,13 +153,13 @@ const tableRef = useTemplateRef('tableRef')
       <div
         class="footer"
         style="
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 10px;
-background-color: var(--n-modal-footer-bg);
-border-top: 1px solid var(--n-modal-border-color);
-                "
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px;
+          background-color: var(--n-modal-footer-bg);
+          border-top: 1px solid var(--n-modal-border-color);
+          "
       >
         <n-pagination
           v-model:page="pagination.page"

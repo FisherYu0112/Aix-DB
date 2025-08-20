@@ -73,6 +73,7 @@ interface TableItem {
   uuid: string
   key: string
   chat_id: string
+  qa_type: string
 }
 
 // 请求接口查询对话历史记录
@@ -117,6 +118,7 @@ export const fetchConversationHistory = async function fetchConversationHistory(
             uuid: chat.uuid,
             key: chat.question.trim(),
             chat_id: chat.chat_id,
+            qa_type: chat.qa_type,
           }))
         }
 

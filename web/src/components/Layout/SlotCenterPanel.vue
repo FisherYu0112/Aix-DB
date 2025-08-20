@@ -52,7 +52,7 @@ setTimeout(() => {
             overflow-hidden
             py-10
             pr-10
-            style="background: linear-gradient(to bottom, #8874f1, #588af9)"
+            style="background: linear-gradient(to bottom, #6754ff, #8478ff)"
           >
             <div
               size-full

@@ -176,8 +176,8 @@ const handleLogout = () => {
     :style="{
       background: `linear-gradient(
         to bottom,
-        #8874f1,
-        #588af9
+        #6754ff,
+        #8478ff
       )`,
     }"
   >

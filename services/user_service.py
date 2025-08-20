@@ -215,7 +215,7 @@ async def delete_user_record(user_id, record_ids):
     in_clause = ", ".join(["%s"] * len(record_ids))
     sql = f"""
         DELETE FROM t_user_qa_record
-        WHERE user_id = %s AND id IN ({in_clause})
+        WHERE user_id = %s AND chat_id IN ({in_clause})
     """
 
     # 将 user_id 添加到参数列表的开头
@@ -228,6 +228,7 @@ async def delete_user_record(user_id, record_ids):
 async def query_user_record(user_id, page, limit, search_text, chat_id):
     """
     根据用户id查询用户问答记录
+    如果chat_id不为空，则查询该chat_id的所有记录；否则根据chat_id去重，取id最小的那条
     :param page
     :param limit
     :param user_id
@@ -243,19 +244,54 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
     elif user_id:
         conditions.append(f"user_id = {user_id}")
 
-    count_sql = "select count(1) as count from t_user_qa_record"
-    if conditions:
-        count_sql += " where " + " and ".join(conditions)
-    total_count = mysql_client.query_mysql_dict(count_sql)[0]["count"]
-    total_pages = (total_count + limit - 1) // limit  # 计算总页数
-
     # 计算偏移量
     offset = (page - 1) * limit
-    records_sql = f"""select * from t_user_qa_record"""
-    if conditions:
-        records_sql += " where " + " and ".join(conditions)
-    records_sql += " order by id desc LIMIT {limit} OFFSET {offset}".format(limit=limit, offset=offset)
-    records = mysql_client.query_mysql_dict(records_sql)
+
+    # 如果chat_id不为空，则不需要去重，直接查询
+    if chat_id:
+        count_sql = "SELECT COUNT(1) as count FROM t_user_qa_record"
+        if conditions:
+            count_sql += " WHERE " + " AND ".join(conditions)
+        total_count_result = mysql_client.query_mysql_dict(count_sql)
+        total_count = total_count_result[0]["count"] if total_count_result else 0
+        total_pages = (total_count + limit - 1) // limit
+
+        records_sql = f"SELECT * FROM t_user_qa_record"
+        if conditions:
+            records_sql += " WHERE " + " AND ".join(conditions)
+        records_sql += f" ORDER BY id ASC LIMIT {limit} OFFSET {offset}"
+        records = mysql_client.query_mysql_dict(records_sql)
+    else:
+        # 如果chat_id为空，则需要去重，根据chat_id取id最小的记录
+        base_condition = ""
+        if conditions:
+            base_condition = " WHERE " + " AND ".join(conditions)
+
+        count_sql = f"""
+            SELECT COUNT(1) as count FROM (
+                SELECT chat_id, MIN(id) as min_id 
+                FROM t_user_qa_record 
+                {base_condition}
+                GROUP BY chat_id
+            ) as distinct_chats
+        """
+        total_count_result = mysql_client.query_mysql_dict(count_sql)
+        total_count = total_count_result[0]["count"] if total_count_result else 0
+        total_pages = (total_count + limit - 1) // limit
+
+        # 查询去重后的记录，根据chat_id分组并取id最小的记录
+        records_sql = f"""
+            SELECT t.* FROM t_user_qa_record t
+            INNER JOIN (
+                SELECT chat_id, MIN(id) as min_id 
+                FROM t_user_qa_record 
+                {base_condition}
+                GROUP BY chat_id
+            ) tm ON t.chat_id = tm.chat_id AND t.id = tm.min_id
+            ORDER BY t.id DESC 
+            LIMIT {limit} OFFSET {offset}
+        """
+        records = mysql_client.query_mysql_dict(records_sql)
 
     return {"records": records, "current_page": page, "total_pages": total_pages, "total_count": total_count}
 

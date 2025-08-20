@@ -1,5 +1,5 @@
 <script lang="tsx" setup>
-import type { InputInst } from 'naive-ui'
+import { backTopDark, type InputInst } from 'naive-ui'
 import { init } from 'echarts'
 import { UAParser } from 'ua-parser-js'
 import * as GlobalAPI from '@/api'
@@ -7,6 +7,7 @@ import { isMockDevelopment } from '@/config'
 import DefaultPage from './DefaultPage.vue'
 import SuggestedView from './SuggestedPage.vue'
 import TableModal from './TableModal.vue'
+import { Console } from 'console'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,6 +63,7 @@ function handleModalClose(value) {
     null,
     '',
   )
+  showDefaultPage.value = true
 }
 
 // 新建对话
@@ -116,25 +118,26 @@ const onFailedReader = (index: number) => {
     window.$ModalMessage.error('请求失败，请重试')
     setTimeout(() => {
       if (refInputTextString.value) {
-        refInputTextString.value.focus()
+        refInputTextString.value.select()
       }
     })
   }
 }
 
-// 读取完成
 const onCompletedReader = (index: number) => {
   if (conversationItems.value[index]) {
     stylizingLoading.value = false
     setTimeout(() => {
       if (refInputTextString.value) {
-        refInputTextString.value.focus()
+        refInputTextString.value.select()
       }
     })
   }
 
   // 查询是推荐列表
-  if (isView.value == false && qa_type.value != 'COMMON_QA' && qa_type.value != 'DATABASE_QA') {
+  if (isView.value == false
+    && qa_type.value != 'COMMON_QA'
+    && qa_type.value != 'DATABASE_QA') {
     query_dify_suggested()
   }
 }
@@ -153,7 +156,7 @@ const onChartReady = (index) => {
 const onRecycleQa = async (index: number) => {
   // 设置当前选中的问答类型
   const item = conversationItems.value[index]
-  onAqtiveChange(item.qa_type)
+  onAqtiveChange(item.qa_type,'')
 
   if (item.qa_type === 'FILEDATA_QA') {
     businessStore.update_file_url(item.file_key)
@@ -201,6 +204,7 @@ interface TableItem {
   uuid: string
   key: string
   chat_id: string
+  qa_type: string
 }
 const tableData = ref<TableItem[]>([])
 const tableRef = ref(null)
@@ -247,9 +251,10 @@ const handleCreateStylized = async (send_text = '') => {
   // 若正在加载，则点击后恢复初始状态
   if (stylizingLoading.value) {
     // 停止dify 对话
-    // console.log('停止dify 对话', businessStore.$state.task_id)
     await GlobalAPI.stop_chat(businessStore.$state.task_id, qa_type.value)
     onCompletedReader(conversationItems.value.length - 1)
+    //隐藏加载提示动画
+    contentLoadingStates.value = contentLoadingStates.value.map(() => false)
     return
   }
 
@@ -257,7 +262,7 @@ const handleCreateStylized = async (send_text = '') => {
   if (send_text === '') {
     if (refInputTextString.value && !inputTextString.value.trim()) {
       inputTextString.value = ''
-      refInputTextString.value.focus()
+      refInputTextString.value?.select()
       return
     }
   }
@@ -284,9 +289,14 @@ const handleCreateStylized = async (send_text = '') => {
     uuid: uuid_str, // 或者根据你的需求计算新的索引
     key: inputTextString.value ? inputTextString.value : send_text,
     chat_id: uuids.value[qa_type.value],
+    qa_type: qa_type.value,
   }
-  // 使用 unshift 方法将新元素添加到数组的最前面
-  tableData.value.unshift(newItem)
+
+  // 如果有相同的chat_id 则不添加 使用 unshift 方法将新元素添加到数组的最前面
+  const hasSameChatId = tableData.value.some(item => item.chat_id === uuids.value[qa_type.value])
+  if (!hasSameChatId) {
+     tableData.value.unshift(newItem)
+  }
 
   // 调用大模型后台服务接口
   stylizingLoading.value = true
@@ -298,7 +308,6 @@ const handleCreateStylized = async (send_text = '') => {
   if (!uuids.value[qa_type.value]) {
     uuids.value[qa_type.value] = uuidv4()
   }
-
 
   if (textContent) {
     // 存储该轮用户对话消息
@@ -448,7 +457,7 @@ const handleResetState = () => {
 
   stylizingLoading.value = false
   nextTick(() => {
-    refInputTextString.value?.focus()
+    refInputTextString.value?.select()
   })
   refReaderMarkdownPreview.value?.abortReader()
   refReaderMarkdownPreview.value?.resetStatus()
@@ -463,7 +472,7 @@ const finish_upload = (res) => {
     const json_data = JSON.parse(res.event.target.responseText)
     const file_url = json_data.data.object_key
     if (json_data.code === 200) {
-      onAqtiveChange('FILEDATA_QA')
+      onAqtiveChange('FILEDATA_QA','')
       businessStore.update_file_url(file_url)
       window.$ModalMessage.success(`文件上传成功`)
     } else {
@@ -514,6 +523,8 @@ const rowProps = (row: any) => {
       await nextTick()
       //  滚动到指定位置
       scrollToItem(row.uuid)
+
+      onAqtiveChange(row.qa_type,row.chat_id)
     },
   }
 }
@@ -548,8 +559,6 @@ const scrollToItem = async (uuid: string) => {
   if (element && element instanceof HTMLElement) {
     try {
       // 强制重排，确保元素位置和尺寸正确
-      console.log('UUID:', uuid)
-      console.log('Element:', element)
       void element.offsetWidth
       element.scrollIntoView({
         behavior: 'smooth',
@@ -564,12 +573,16 @@ const scrollToItem = async (uuid: string) => {
 
 // 默认选中的对话类型
 const qa_type = ref('COMMON_QA')
-const onAqtiveChange = (val) => {
+const onAqtiveChange = (val,chat_id) => {
   qa_type.value = val
   businessStore.update_qa_type(val)
 
   // 新增：切换类型时生成新uuid
-  uuids.value[val] = uuidv4()
+  if (chat_id) {
+     uuids.value[val] = chat_id
+  } else {
+      uuids.value[val] = uuidv4()
+  }
 
   // 清空文件上传历史url
   if (val === 'FILEDATA_QA') {
@@ -595,7 +608,7 @@ const query_dify_suggested = async () => {
 const onSuggested = (index: number) => {
   // 如果是报告问答的建议问题点击后切换到通用对话
   if (qa_type.value === 'REPORT_QA') {
-    onAqtiveChange('COMMON_QA')
+    onAqtiveChange('COMMON_QA','')
   }
   handleCreateStylized(suggested_array.value[index])
 }
@@ -757,7 +770,7 @@ const collapsed = useLocalStorage(
               <n-button
                 type="primary"
                 icon-placement="left"
-                color="#5e58e7"
+                color="#5f5ae9"
                 strong
                 class="create-chat"
                 @click="newChat"
@@ -797,6 +810,7 @@ const collapsed = useLocalStorage(
               :style="{
                 'font-size': `16px`,
                 '--n-td-color-hover': `#d5dcff`,
+                 '--n-td-color': `#fff`, 
                 'font-family': `-apple-system, BlinkMacSystemFont,'Segoe UI', Roboto, 'Helvetica Neue', Arial,sans-serif`,
               }"
               size="small"
@@ -890,68 +904,69 @@ const collapsed = useLocalStorage(
                 :ref="(el) => setMarkdownPreview(item.uuid, item.role, el)"
                 class="mb-4"
               >
-                <div v-if="item.role === 'user'">
-                  <div
-                    whitespace-break-spaces
-                    text-right
+           
+              <div v-if="item.role === 'user'" class="flex flex-col items-end space-y-2 w-full">
+                <!-- 用户消息 -->
+                <div
                     :style="{
-                      'margin-left': `10%`,
-                      'margin-right': `10%`,
-                      'padding': `15px`,
-                      'border-radius': `5px`,
-                      'text-align': `center`,
-                      'float': `right`,
+                        'margin-left': `10%`,
+                        'margin-right': `10%`,
+                        'padding': `15px`,
+                        'border-radius': `5px`,
+                        'text-align': `center`,
+                        'max-width': '80%', // 控制宽度避免撑满
                     }"
-                  >
+                >
                     <n-space>
-                      <n-tag
-                        size="large"
-                        :bordered="false"
-                        :round="true"
-                        :style="{
-                          'fontSize': '15px',
-                          'fontFamily': 'PMingLiU !important',
-                          'color': '#26244c',
-                          'max-width': '900px',
-                          'text-align': 'left',
-                          'padding': '5px 18px',
-                          'height': 'auto',
-                          // 允许长单词换行到下一行
-                          'word-wrap': 'break-word',
-                          // 允许在单词内换行
-                          'word-break': 'break-all',
-                          // 移除默认的 white-space 属性，确保文本能正常换行
-                          'white-space': 'normal',
-                          // 强制应用样式
-                          'overflow': 'visible !important',
-                        }"
-                        :color="{
-                          color: '#e0dfff',
-                          borderColor: '#e0dfff',
-                        }"
-                      >
-                        <template #avatar>
-                          <div class="size-25 i-my-svg:user-avatar"></div>
-                        </template>
-                        {{ item.question }}
-                      </n-tag>
+                        <n-tag
+                            size="large"
+                            :bordered="false"
+                            :round="true"
+                            :style="{
+                                'fontSize': '16px',
+                                'fontFamily': `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'`,
+                                'fontWeight': '400',
+                                'color': '#26244c',
+                                'max-width': '600px',
+                                'text-align': 'left',
+                                'padding': '5px 18px',
+                                'height': 'auto',
+                                'line-height': 1.5,
+                                'word-wrap': 'break-word',
+                                'word-break': 'break-all',
+                                'white-space': 'pre-wrap',
+                                'overflow': 'visible',
+                            }"
+                            :color="{
+                                color: '#e0dfff',
+                                borderColor: '#e0dfff',
+                            }"
+                        >
+                            <template #avatar>
+                                <div class="size-25 i-my-svg:user-avatar"></div>
+                            </template>
+                            {{ item.question }}
+                        </n-tag>
                     </n-space>
-                  </div>
-                  <div
+                </div>
+
+                <!-- 加载动画：紧跟在消息下方，但对齐到左边 -->
+                <div
                     v-if="contentLoadingStates[index]"
                     class="i-svg-spinners:bars-scale"
                     :style="{
-                      'width': `24px`,
-                      'height': `24px`,
-                      'color': `#b1adf3`,
-                      'border-left-color': `#b1adf3`,
-                      'margin-top': `80px`,
-                      'animation': `spin 1s linear infinite`,
-                      'margin-left': `12%`,
-                      'float': `left`,
+                        'width': `24px`,
+                        'height': `24px`,
+                        'color': `#b1adf3`,
+                        'border-left-color': `#b1adf3`,
+                        'animation': `spin 1s linear infinite`,
+                        'margin-top': '10px',
+                        'align-self': 'flex-start', // 让此元素在交叉轴（水平轴）上靠左对齐
+                        'margin-left': '12%', // 与上面的消息保持一致的缩进
                     }"
-                  ></div>
-                </div>
+                ></div>
+            </div>
+            
                 <div v-if="item.role === 'assistant'">
                   <MarkdownPreview
                     :reader="item.reader"
@@ -1004,7 +1019,7 @@ const collapsed = useLocalStorage(
                       qa_type === 'COMMON_QA' && 'active-tab',
                       'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
                     ]"
-                    @click="onAqtiveChange('COMMON_QA')"
+                    @click="onAqtiveChange('COMMON_QA','')"
                   >
                     <template #icon>
                       <n-icon size="16">
@@ -1034,7 +1049,7 @@ const collapsed = useLocalStorage(
                       qa_type === 'DATABASE_QA' && 'active-tab',
                       'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
                     ]"
-                    @click="onAqtiveChange('DATABASE_QA')"
+                    @click="onAqtiveChange('DATABASE_QA','')"
                   >
                     <template #icon>
                       <n-icon size="19">
@@ -1049,7 +1064,7 @@ const collapsed = useLocalStorage(
                       qa_type === 'FILEDATA_QA' && 'active-tab',
                       'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
                     ]"
-                    @click="onAqtiveChange('FILEDATA_QA')"
+                    @click="onAqtiveChange('FILEDATA_QA','')"
                   >
                     <template #icon>
                       <n-icon size="20">
@@ -1084,7 +1099,7 @@ const collapsed = useLocalStorage(
                       qa_type === 'REPORT_QA' && 'active-tab',
                       'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
                     ]"
-                    @click="onAqtiveChange('REPORT_QA')"
+                    @click="onAqtiveChange('REPORT_QA','')"
                   >
                     <template #icon>
                       <n-icon size="18">
@@ -1143,7 +1158,6 @@ const collapsed = useLocalStorage(
                   ref="refInputTextString"
                   v-model:value="inputTextString"
                   type="textarea"
-                  autofocus
                   h-60
                   class="textarea-resize-none text-15"
                   :style="{
@@ -1373,6 +1387,7 @@ const collapsed = useLocalStorage(
 }
 
 .content {
+  border-right:1px solid #f6f7fb;
   background-color: #fff;
   // padding: 8px;
 }
@@ -1429,4 +1444,5 @@ const collapsed = useLocalStorage(
   background-color: #bfbfbf; /* 滚动条颜色 */
   border-radius: 3px; /* 滚动条圆角 */
 }
+
 </style>
