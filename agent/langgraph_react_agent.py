@@ -30,7 +30,7 @@ class LangGraphReactAgent:
             "MODEL_TEMPERATURE",
             "MODEL_BASE_URL",
             "MODEL_API_KEY",
-            "COMMON_QA_GROUP_URL",
+            "MCP_HUB_COMMON_QA_GROUP_URL",
         ]
         for var in required_env_vars:
             if not os.getenv(var):
@@ -58,7 +58,7 @@ class LangGraphReactAgent:
         self.client = MultiServerMCPClient(
             {
                 "mcp-hub": {
-                    "url": os.getenv("COMMON_QA_GROUP_URL"),
+                    "url": os.getenv("MCP_HUB_COMMON_QA_GROUP_URL"),
                     "transport": "streamable_http",
                 },
                 # "query_qa_record": {

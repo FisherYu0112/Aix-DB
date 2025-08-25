@@ -230,7 +230,9 @@ const contentLoadingStates = ref(
   visibleConversationItems.value.map(() => false),
 )
 
-// chat_id定义
+// 
+
+
 const uuids = ref<Record<string, string>>({}) // 改为对象存储不同问答类型的uuid
 
 // 提交对话

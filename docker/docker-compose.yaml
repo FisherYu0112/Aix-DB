@@ -3,7 +3,7 @@ version: '3.8'
 services:
   chat-web:
 #    image: apconw/chat-vue3-mvp:1.1.5
-    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/chat-vue3-mvp:1.1.5
+    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/chat-vue3-mvp:1.1.6
     container_name: chat-vue3-mvp
     environment:
       - TZ=Asia/Shanghai
@@ -29,7 +29,7 @@ services:
 
   chat-service:
 #    image: apconw/sanic-web:1.1.5
-    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/sanic-web:1.1.5
+    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/sanic-web:1.1.6
     container_name: sanic-web
     environment:
       - MYSQL_HOST=host.docker.internal
@@ -37,6 +37,7 @@ services:
       - MYSQL_USER=root
       - MYSQL_PASSWORD=1
       - MYSQL_DATABASE=chat_db
+      - SQLALCHEMY_DATABASE_URI=mysql+pymysql://root:1@host.docker.internal:13006/chat_db
       - DIFY_SERVER_URL=http://host.docker.internal:18000
       - DIFY_DATABASE_QA_API_KEY=app-GIz9dM9GPUXVZOkDRaC0TOxh
       - MINIO_ENDPOINT=host.docker.internal:19000
@@ -45,8 +46,9 @@ services:
       - MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
       - MODEL_NAME=qwen-plus
       - MODEL_TEMPERATURE=0.75
-      - MODEL_API_KEY=sk-xxx
-      - MCP_HUB_URL=http://host.docker.internal:3300/mcp
+      - MODEL_API_KEY=sk-a9f7bfdb8bd74ec9bc7759543eba15eb
+      - MCP_HUB_COMMON_QA_GROUP_URL=http://host.docker.internal:3300/mcp/fa7646b4-1679-4d1d-9bda-3e9190cfef1a
+      - MCP_HUB_DATABASE_QA_GROUP_URL=http://host.docker.internal:3300/mcp/f635fd21-2f44-4a99-8a92-f778b4d3607f
       - TZ=Asia/Shanghai
     ports:
       - "8088:8088"
@@ -77,3 +79,20 @@ services:
       - ./volume/mcp-data/data:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  gpt-vis-api:
+    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/gpt-vis-api:0.0.1
+    container_name: gpt-vis-api
+    ports:
+      - "3100:3000"
+    environment:
+      MINIO_ENDPOINT: host.docker.internal
+      MINIO_PORT: 19000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: QfIx8FgdpgKtmbFMbKVb
+      MINIO_SECRET_KEY: DsitWZJT3pecrg020Y2NKCETVpsIc3h2PrKTqONA
+      MINIO_BUCKET: chart-images
+      MINIO_PUBLIC_DOMAIN: "http://localhost:19000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

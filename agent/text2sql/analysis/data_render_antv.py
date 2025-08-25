@@ -20,7 +20,7 @@ async def data_render_ant(state: AgentState):
     client = MultiServerMCPClient(
         {
             "mcphub-sse": {
-                "url": os.getenv("DATABASE_QA_GROUP_URL"),
+                "url": os.getenv("MCP_HUB_DATABASE_QA_GROUP_URL"),
                 "transport": "streamable_http",
             }
         }

@@ -135,6 +135,9 @@ class Text2SqlAgent:
 
         if step_name in content_map:
             content = content_map[step_name]()
+            if step_name == "data_render":
+                content = "\n---\n" + content
+
             # 适配EChart表格
             data_type = (
                 DataTypeEnum.ANSWER.value[0] if step_name != "data_render_apache" else DataTypeEnum.BUS_DATA.value[0]
