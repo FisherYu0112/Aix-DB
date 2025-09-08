@@ -55,4 +55,4 @@ async def stop_chat(request):
     """
     task_id = request.json.get("task_id")
     qa_type = request.json.get("qa_type")
-    return await stop_dify_chat(task_id, qa_type)
+    return await stop_dify_chat(request, task_id, qa_type)

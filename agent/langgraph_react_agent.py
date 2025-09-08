@@ -4,6 +4,7 @@ import logging
 import os
 import traceback
 from typing import Optional
+from uuid import uuid4
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.messages.utils import trim_messages
@@ -13,7 +14,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from constants.code_enum import DataTypeEnum, DiFyAppEnum
-from services.user_service import add_user_record
+from services.user_service import add_user_record, decode_jwt_token
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,9 @@ class LangGraphReactAgent:
         # 全局checkpointer用于持久化所有用户的对话状态
         self.checkpointer = InMemorySaver()
 
+        # 存储运行中的任务
+        self.running_tasks = {}
+
     @staticmethod
     def _create_response(
         content: str, message_type: str = "continue", data_type: str = DataTypeEnum.ANSWER.value[0]
@@ -126,6 +130,13 @@ class LangGraphReactAgent:
         :param user_token:
         :return:
         """
+
+        # 获取用户信息 标识对话状态
+        user_dict = await decode_jwt_token(user_token)
+        task_id = user_dict["id"]
+        task_context = {"cancelled": False}
+        self.running_tasks[task_id] = task_context
+
         try:
             t02_answer_data = []
 
@@ -150,6 +161,15 @@ class LangGraphReactAgent:
                 config=config,
                 stream_mode="messages",
             ):
+                # 检查是否已取消
+                if self.running_tasks[task_id]["cancelled"]:
+                    await response.write(
+                        self._create_response("\n> 这条消息已停止", "info", DataTypeEnum.ANSWER.value[0])
+                    )
+                    # 发送最终停止确认消息
+                    await response.write(self._create_response("", "end", DataTypeEnum.STREAM_END.value[0]))
+                    break
+
                 # print(message_chunk)
                 # 工具输出
                 if metadata["langgraph_node"] == "tools":
@@ -172,12 +192,40 @@ class LangGraphReactAgent:
                         await response.flush()
                     await asyncio.sleep(0)
 
-            await add_user_record(
-                uuid_str, session_id, query, t02_answer_data, {}, DiFyAppEnum.COMMON_QA.value[0], user_token
-            )
+            # 只有在未取消的情况下才保存记录
+            if not self.running_tasks[task_id]["cancelled"]:
+                await add_user_record(
+                    uuid_str, session_id, query, t02_answer_data, {}, DiFyAppEnum.COMMON_QA.value[0], user_token
+                )
+
+        except asyncio.CancelledError:
+            await response.write(self._create_response("\n> 这条消息已停止", "info", DataTypeEnum.ANSWER.value[0]))
+            await response.write(self._create_response("", "end", DataTypeEnum.STREAM_END.value[0]))
         except Exception as e:
             print(f"[ERROR] Agent运行异常: {e}")
             traceback.print_exception(e)
             await response.write(
                 self._create_response("[ERROR] 智能体运行异常:", "error", DataTypeEnum.ANSWER.value[0])
             )
+        finally:
+            # 清理任务记录
+            if task_id in self.running_tasks:
+                del self.running_tasks[task_id]
+
+    async def cancel_task(self, task_id: str) -> bool:
+        """
+        取消指定的任务
+        :param task_id: 任务ID
+        :return: 是否成功取消
+        """
+        if task_id in self.running_tasks:
+            self.running_tasks[task_id]["cancelled"] = True
+            return True
+        return False
+
+    def get_running_tasks(self):
+        """
+        获取当前运行中的任务列表
+        :return: 运行中的任务列表
+        """
+        return list(self.running_tasks.keys())

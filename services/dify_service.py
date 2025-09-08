@@ -18,7 +18,7 @@ from constants.code_enum import (
 )
 from constants.dify_rest_api import DiFyRestApi
 from services.db_qadata_process import process
-from services.user_service import add_question_record, query_user_qa_record
+from services.user_service import add_question_record, query_user_qa_record, decode_jwt_token
 
 logger = logging.getLogger(__name__)
 
@@ -464,37 +464,61 @@ async def query_dify_suggested(chat_id) -> dict:
         raise
 
 
-async def stop_dify_chat(task_id, qa_type) -> dict:
+async def stop_dify_chat(request, task_id, qa_type) -> dict:
     """
     停止dify对话流输出
 
     :param task_id: 任务id。
     :param qa_type: 问答类型
+    :param request
     :return: 返回服务器响应。
     """
-    # 查询对话记录
-    url = DiFyRestApi.replace_path_params(DiFyRestApi.DIFY_REST_STOP, {"task_id": task_id})
+    # 获取登录用户信息
+    token = request.headers.get("Authorization")
+    if not token:
+        raise MyException(SysCodeEnum.c_401)
+    if token.startswith("Bearer "):
+        token = token.split(" ")[1]
 
-    api_key = os.getenv("DIFY_DATABASE_QA_API_KEY")
-    # 行业报告走的是 报告问答的key
-    if DiFyAppEnum.FILEDATA_QA.value[0] == qa_type:
-        api_key = os.getenv("DIFY_ENTERPRISE_REPORT_API_KEY")
+    # 通用问答和数据问答停止任务
+    if qa_type == DiFyAppEnum.COMMON_QA.value[0]:
+        user_dict = await decode_jwt_token(token)
+        task_id = user_dict["id"]
+        success = await agent.cancel_task(task_id)
+        return {"success": success, "message": "任务已停止" if success else "未找到任务"}
 
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    body = {"user": "abc-123"}
+    elif qa_type == DiFyAppEnum.DATABASE_QA.value[0]:
+        user_dict = await decode_jwt_token(token)
+        task_id = user_dict["id"]
+        success = await sql_agent.cancel_task(task_id)
+        return {"success": success, "message": "任务已停止" if success else "未找到任务"}
 
-    logger.info(url)
-
-    """
-    data：若传入字典或元组列表，requests 库会把数据编码为表单数据格式（key1=value1&key2=value2）；若传入字节或类文件对象，则直接发送。
-    json：requests 库会自动把传入的 Python 对象序列化为 JSON 字符串，然后发送。
-    """
-    response = requests.post(url, json=body, headers=headers)
-
-    # 检查请求是否成功
-    if response.status_code == 200:
-        logger.info("Stop chat successfully sent.")
-        return response.json()
     else:
-        logger.error(f"Failed to stop chat. Status code: {response.status_code},Response body: {response.text}")
-        raise
+        # 文件问答和报告问答停止任务走默认的dify接口
+
+        # 查询对话记录
+        url = DiFyRestApi.replace_path_params(DiFyRestApi.DIFY_REST_STOP, {"task_id": task_id})
+
+        api_key = os.getenv("DIFY_DATABASE_QA_API_KEY")
+        # 行业报告走的是 报告问答的key
+        if DiFyAppEnum.FILEDATA_QA.value[0] == qa_type:
+            api_key = os.getenv("DIFY_ENTERPRISE_REPORT_API_KEY")
+
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        body = {"user": "abc-123"}
+
+        logger.info(url)
+
+        """
+        data：若传入字典或元组列表，requests 库会把数据编码为表单数据格式（key1=value1&key2=value2）；若传入字节或类文件对象，则直接发送。
+        json：requests 库会自动把传入的 Python 对象序列化为 JSON 字符串，然后发送。
+        """
+        response = requests.post(url, json=body, headers=headers)
+
+        # 检查请求是否成功
+        if response.status_code == 200:
+            logger.info("Stop chat successfully sent.")
+            return response.json()
+        else:
+            logger.error(f"Failed to stop chat. Status code: {response.status_code},Response body: {response.text}")
+            raise

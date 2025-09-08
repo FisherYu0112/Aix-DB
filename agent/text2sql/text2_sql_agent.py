@@ -8,7 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 from agent.text2sql.analysis.graph import create_graph
 from agent.text2sql.state.agent_state import AgentState
 from constants.code_enum import DataTypeEnum, DiFyAppEnum
-from services.user_service import add_user_record
+from services.user_service import add_user_record, decode_jwt_token
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,8 @@ class Text2SqlAgent:
     """
 
     def __init__(self):
-        pass
+        # 存储运行中的任务
+        self.running_tasks = {}
 
     async def run_agent(
         self, query: str, response=None, chat_id: str = None, uuid_str: str = None, user_token=None
@@ -42,7 +43,42 @@ class Text2SqlAgent:
             initial_state = AgentState(user_query=query, attempts=0, correct_attempts=0)
             graph: CompiledStateGraph = create_graph()
 
+            # 获取用户信息 标识对话状态
+            user_dict = await decode_jwt_token(user_token)
+            task_id = user_dict["id"]
+            task_context = {"cancelled": False}
+            self.running_tasks[task_id] = task_context
+
+            # async for chunk in graph.astream(initial_state, stream_mode="values"):
+            #
+            #     # if metadata["langgraph_node"] == "tools":
+            #     #     tool_name = message_chunk.name or "未知工具"
+            #     #     # logger.info(f"工具调用结果:{message_chunk.content}")
+            #     #     tool_use = "> 调用工具:" + tool_name + "\n\n"
+            #     #     await response.write(self._create_response(tool_use))
+            #     #     t02_answer_data.append(tool_use)
+            #     #     continue
+            #     print(chunk)
+            #     # if chunk.content:
+            #     #     logger.info(f"chuck>{chunk}")
+            #     #     logger.info(f"metadata>{metadata}")
+            #     #     await response.write(self._create_response(chunk.content))
+            #     #     if hasattr(response, "flush"):
+            #     #         await response.flush()
+            #     #     await asyncio.sleep(0)
+
             async for chunk_dict in graph.astream(initial_state, stream_mode="updates"):
+
+                # 检查是否已取消
+                if self.running_tasks[task_id]["cancelled"]:
+                    await self._send_response(response, "</details>\n\n", "continue", DataTypeEnum.ANSWER.value[0])
+                    await response.write(
+                        self._create_response("\n> 这条消息已停止", "info", DataTypeEnum.ANSWER.value[0])
+                    )
+                    # 发送最终停止确认消息
+                    await response.write(self._create_response("", "end", DataTypeEnum.STREAM_END.value[0]))
+                    break
+
                 logger.info(f"Processing chunk: {chunk_dict}")
 
                 langgraph_step, step_value = next(iter(chunk_dict.items()))
@@ -62,22 +98,25 @@ class Text2SqlAgent:
             if current_step is not None and current_step not in ["summarize", "data_render", "data_render_apache"]:
                 await self._close_current_step(response, t02_answer_data)
 
-            # 保存用户记录
-            await add_user_record(
-                uuid_str, chat_id, query, t02_answer_data, t04_answer_data, DiFyAppEnum.DATABASE_QA.value[0], user_token
-            )
+            # 只有在未取消的情况下才保存记录
+            if not self.running_tasks[task_id]["cancelled"]:
+                await add_user_record(
+                    uuid_str,
+                    chat_id,
+                    query,
+                    t02_answer_data,
+                    t04_answer_data,
+                    DiFyAppEnum.DATABASE_QA.value[0],
+                    user_token,
+                )
 
+        except asyncio.CancelledError:
+            await response.write(self._create_response("\n> 这条消息已停止", "info", DataTypeEnum.ANSWER.value[0]))
+            await response.write(self._create_response("", "end", DataTypeEnum.STREAM_END.value[0]))
         except Exception as e:
             logger.error(f"Error in run_agent: {str(e)}", exc_info=True)
             error_msg = f"处理过程中发生错误: {str(e)}"
             await self._send_response(response, error_msg, "error")
-            # # 即使出错也尝试保存记录
-            # try:
-            #     await add_user_record(
-            #         uuid_str, chat_id, query, [error_msg], DiFyAppEnum.DATABASE_QA.value[0], user_token
-            #     )
-            # except Exception as record_error:
-            #     logger.error(f"Failed to save user record: {str(record_error)}")
 
     async def _handle_step_change(
         self,
@@ -124,10 +163,11 @@ class Text2SqlAgent:
         处理各个步骤的内容
         """
         content_map = {
-            "schema_inspector": lambda: f"共检索{len(step_value['db_info'])}张表.",
-            "llm_reasoning": lambda: step_value["sql_reasoning"],
+            "schema_inspector": lambda: self._format_db_info(
+                step_value["db_info"]
+            ),  # "llm_reasoning": lambda: step_value["sql_reasoning"],
             "sql_generator": lambda: step_value["generated_sql"],
-            "sql_executor": lambda: "执行sql语句成功",
+            "sql_executor": lambda: "执行sql语句成功" if step_value["execution_result"].success else "执行sql语句失败",
             "summarize": lambda: step_value["report_summary"],
             "data_render": lambda: step_value["chart_url"],
             "data_render_apache": lambda: step_value["apache_chart_data"],
@@ -158,6 +198,28 @@ class Text2SqlAgent:
                 if hasattr(response, "flush"):
                     await response.flush()
                 await asyncio.sleep(0)
+
+    @staticmethod
+    def _format_db_info(db_info: Dict[str, Any]) -> str:
+        """
+        格式化数据库信息，包含表名和注释
+        :param db_info: 数据库信息
+        :return: 格式化后的字符串
+        """
+        if not db_info:
+            return "共检索0张表."
+
+        table_descriptions = []
+        for table_name, table_info in db_info.items():
+            # 获取表注释
+            table_comment = table_info.get("table_comment", "")
+            if table_comment:
+                table_descriptions.append(f"{table_name}({table_comment})")
+            else:
+                table_descriptions.append(table_name)
+
+        tables_str = "、".join(table_descriptions)
+        return f"共检索{len(db_info)}张表: {tables_str}."
 
     @staticmethod
     async def _send_response(
@@ -193,3 +255,14 @@ class Text2SqlAgent:
             "dataType": data_type,
         }
         return "data:" + json.dumps(res, ensure_ascii=False) + "\n\n"
+
+    async def cancel_task(self, task_id: str) -> bool:
+        """
+        取消指定的任务
+        :param task_id: 任务ID
+        :return: 是否成功取消
+        """
+        if task_id in self.running_tasks:
+            self.running_tasks[task_id]["cancelled"] = True
+            return True
+        return False

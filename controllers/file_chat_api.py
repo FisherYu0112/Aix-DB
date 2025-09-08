@@ -61,8 +61,20 @@ async def upload_file(request: Request):
     :param request:
     :return:
     """
-    file_url = minio_utils.upload_file_from_request(request=request)
-    return file_url
+    file_key = minio_utils.upload_file_from_request(request=request)
+    return file_key
+
+
+@bp.post("/upload_file_and_parse")
+@async_json_resp
+async def upload_file_and_parse(request: Request):
+    """
+    上传附件并解析内容
+    :param request:
+    :return:
+    """
+    file_key = minio_utils.upload_file_and_parse_from_request(request=request)
+    return file_key
 
 
 @bp.post("/process_file_llm_out")

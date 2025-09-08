@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from langchain.prompts import ChatPromptTemplate
 
@@ -20,7 +21,7 @@ def create_reasoning_steps(state):
     prompt = ChatPromptTemplate.from_template(
         """
         You are a helpful data analyst who is great at thinking deeply and reasoning about the user's question and the database schema, and you provide a step-by-step reasoning plan in order to answer the user's question.
-                                              
+
         1. Think deeply and reason about the user's question and the database schema.
         2. Give a step by step reasoning plan in order to answer user's question.
         3. The reasoning plan should be in the language same as the language user provided in the input.
@@ -34,8 +35,10 @@ def create_reasoning_steps(state):
 
         Database Schema:
         {db_schema}
-          
+
         User's Question: {user_query}
+        
+        Current Time: {current_time}
 
         Let's think step by step.
         """
@@ -48,10 +51,11 @@ def create_reasoning_steps(state):
             {
                 "db_schema": state["db_info"],
                 "user_query": state["user_query"],
+                "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
         )
 
-        # logger.info(f"Raw LLM response: {response.content}")
+        logger.info(f"Raw LLM response: {response.content}")
 
         state["sql_reasoning"] = response.content
 

@@ -33,7 +33,7 @@ def create_graph():
     graph = StateGraph(AgentState)
 
     graph.add_node("schema_inspector", DatabaseService.get_table_schema)
-    graph.add_node("llm_reasoning", create_reasoning_steps)
+    # graph.add_node("llm_reasoning", create_reasoning_steps)
     graph.add_node("sql_generator", sql_generate)
     graph.add_node("sql_executor", DatabaseService.execute_sql)
     graph.add_node("data_render", data_render_ant)
@@ -41,8 +41,8 @@ def create_graph():
     graph.add_node("summarize", summarize)
 
     graph.set_entry_point("schema_inspector")
-    graph.add_edge("schema_inspector", "llm_reasoning")
-    graph.add_edge("llm_reasoning", "sql_generator")
+    # graph.add_edge("schema_inspector", "llm_reasoning")
+    graph.add_edge("schema_inspector", "sql_generator")
     graph.add_edge("sql_generator", "sql_executor")
     graph.add_edge("sql_executor", "summarize")
 

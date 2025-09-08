@@ -143,7 +143,11 @@ const tableRef = useTemplateRef('tableRef')
           :row-key="rowKey"
           :checked-row-keys="checkedRowKeys"
           style="height: 100%; width: 100%"
-          @update:checked-row-keys="handleCheck"
+          :style="{
+            'font-size': `15px`,
+            '--n-td-color': `#ffffff`,
+            'font-family': `-apple-system, BlinkMacSystemFont,'Segoe UI', Roboto, 'Helvetica Neue', Arial,sans-serif`,
+          }"
         >
           <template #bodyCell="{ column, row }">
             <td :key="column.key">{{ row[column.key] }}</td>
@@ -153,12 +157,12 @@ const tableRef = useTemplateRef('tableRef')
       <div
         class="footer"
         style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px;
-          background-color: var(--n-modal-footer-bg);
-          border-top: 1px solid var(--n-modal-border-color);
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 10px;
+background-color: var(--n-modal-footer-bg);
+border-top: 1px solid var(--n-modal-border-color);
           "
       >
         <n-pagination

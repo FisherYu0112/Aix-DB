@@ -17,6 +17,8 @@
     - 可修改**MODEL_NAME** 大模型名称如qwen-plus
     - 可修改**MODEL_BASE_URL** 公网大模型服务地址默认使用阿里云公网模型服务
 
+- 根据情况修改**docker/docker-compose.yml里chat-web**前端**nginx.conf**配置文件
+    - 服务器部署,请修改**docker/nginx.conf**文件将**host.docker.internal**修改为实际IP地址
 ```angular2html
 # 拉起前后端服务和中间件
 cd docker

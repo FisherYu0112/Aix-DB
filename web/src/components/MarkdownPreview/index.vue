@@ -9,6 +9,10 @@ import {
   transformStreamValue,
 } from './transform'
 
+// code高亮语法样式
+import 'highlight.js/styles/atom-one-dark-reasonable.css'
+
+
 const props = withDefaults(defineProps<Props>(), {
   isInit: false, // 用于控制 页面渲染速度 初始化时快一点 问答时慢一点
   chartId: '', // 用于区分多个图表实例
@@ -709,8 +713,13 @@ const onChartCompletedReader = function () {
     margin: 10px 16px;
 
     & > code {
-      --at-apply: 'bg-#e5e5e5';
-      --at-apply: whitespace-pre mx-4px px-6px py-3px rounded-5px;
+      // 添加透明背景的样式
+
+      background-color: transparent;
+      white-space: pre;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 0.9em;
     }
 
     img {
@@ -750,40 +759,9 @@ const onChartCompletedReader = function () {
     background-color: #f2f2f2; /* 可选：给表头设置背景色 */
   }
 
-  code {
-    background-color: #f5f5f5;
-    color: #333;
-  }
-
-  // 为代码块添加样式
-
-  .markdown-code-wrapper {
-    max-width: 870px; /* 继承父容器宽度 */
-    overflow-x: auto;
-    box-sizing: border-box;
-    white-space: pre-wrap;
-    word-break: break-word; /* 增加断词规则 */
-  }
-
-  /* 覆盖pre标签默认样式 */
-
-  pre {
-    width: 100%;
-    max-width: 100%;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-
   /* 添加图片样式，约束宽度 */
 
   img {
-    // height: auto;
-    // display: block; // 将图片转为块级元素
-    // margin-left: auto; // 左外边距自动
-    // margin-right: auto; // 右外边距自动
-    // max-width: 100%; // 最大宽度为容器宽度
-    // // height: auto; // 高度自适应
-
     width: 95%; // 设置宽度为视口宽度
     height: auto; // 设置高度为视口高度
     object-fit: cover; // 保持图片比例，覆盖整个容器，可能会裁剪部分图片
@@ -792,22 +770,9 @@ const onChartCompletedReader = function () {
   }
 
   .active-tab {
-    // background: linear-gradient(to left, #f3f2ff, #e1e7fe);
-
     background: linear-gradient(to left, #f0effe, #d4eefc);
     border-color: #635eed;
     color: #635eed;
   }
-  // 为代码块添加样式
-
-  .markdown-code-wrapper {
-    max-width: 100%; // 指定最大宽度，可按需调整
-    margin-left: auto;
-    margin-right: auto;
-    overflow-x: auto; // 当代码超出最大宽度时显示水平滚动条
-  }
-  // think {
-  //     color: #635eed;
-  // }
 }
 </style>
