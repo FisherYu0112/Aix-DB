@@ -163,9 +163,9 @@ class Text2SqlAgent:
         处理各个步骤的内容
         """
         content_map = {
-            "schema_inspector": lambda: self._format_db_info(
-                step_value["db_info"]
-            ),  # "llm_reasoning": lambda: step_value["sql_reasoning"],
+            "schema_inspector": lambda: self._format_db_info(step_value["db_info"]),
+            # "llm_reasoning": lambda: step_value["sql_reasoning"],
+            "table_relationship": lambda: json.dumps(step_value["table_relationship"], ensure_ascii=False),
             "sql_generator": lambda: step_value["generated_sql"],
             "sql_executor": lambda: "执行sql语句成功" if step_value["execution_result"].success else "执行sql语句失败",
             "summarize": lambda: step_value["report_summary"],

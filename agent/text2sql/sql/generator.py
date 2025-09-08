@@ -21,6 +21,9 @@ def sql_generate(state):
 
         ## DATABASE SCHEMA
         {db_schema}
+        
+        ## TABLE RELATIONSHIP
+        {table_relationship}
 
         ## QUESTION
         User's Question: {user_query}
@@ -76,6 +79,7 @@ def sql_generate(state):
             {
                 "db_schema": state["db_info"],
                 "user_query": state["user_query"],
+                "table_relationship": state.get("table_relationship", []),
                 "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 # "sql_generation_reasoning": state["sql_reasoning"],
             }
