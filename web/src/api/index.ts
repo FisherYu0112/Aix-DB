@@ -5,7 +5,7 @@
 /**
  * Event Stream 调用大模型接口 Ollama3 (Fetch 调用)
  */
-export async function createOllama3Stylized(text, qa_type, uuid,chat_id) {
+export async function createOllama3Stylized(text, qa_type, uuid, chat_id) {
   const userStore = useUserStore()
   const token = userStore.getUserToken()
   const businessStore = useBusinessStore()
@@ -33,8 +33,8 @@ export async function createOllama3Stylized(text, qa_type, uuid,chat_id) {
     body: JSON.stringify({
       query: text,
       qa_type,
-      uuid:uuid,
-      chat_id: chat_id,
+      uuid,
+      chat_id,
     }),
   })
   return fetch(req)
@@ -68,7 +68,7 @@ export async function login(username, password) {
  * @param limit
  * @returns
  */
-export async function query_user_qa_record(page, limit, search_text,chat_id) {
+export async function query_user_qa_record(page, limit, search_text, chat_id) {
   const userStore = useUserStore()
   const token = userStore.getUserToken()
   const url = new URL(`${location.origin}/sanic/user/query_user_record`)
@@ -83,7 +83,7 @@ export async function query_user_qa_record(page, limit, search_text,chat_id) {
       page,
       limit,
       search_text,
-      chat_id
+      chat_id,
     }),
   })
   return fetch(req)

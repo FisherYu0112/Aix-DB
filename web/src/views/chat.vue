@@ -846,7 +846,7 @@ const backgroundColorVariable = ref('#ffffff')
           </div>
           <div
             class="footer"
-            style="flex-shrink: 0; height: 200"
+            style="flex-shrink: 0"
           >
             <n-divider
               style="width: calc(100% - 50px); margin-left: 25px; margin-right: 25px;
