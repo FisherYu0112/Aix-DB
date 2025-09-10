@@ -255,6 +255,7 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
     if chat_id:
         conditions.append(f"chat_id = '{chat_id}'")
     if search_text:
+        search_text = search_text.strip()  # 去除search_text首尾空格
         conditions.append(f"question LIKE '%{search_text}%'")
     elif user_id:
         conditions.append(f"user_id = {user_id}")

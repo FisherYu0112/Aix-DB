@@ -4,6 +4,7 @@
 
 import logging
 import os
+import traceback
 
 from py2neo import Graph
 
@@ -70,6 +71,7 @@ def get_table_relationship(state: AgentState):
         state["table_relationship"] = result
 
     except Exception as e:
+        traceback.print_exception(e)
         logger.error(f"获取表关系时发生错误: {e}")
         state["table_relationship"] = []
 

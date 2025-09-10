@@ -111,3 +111,4 @@ services:
       - apoc.export.file.enabled=true
       - apoc.import.file.enabled=true
       - apoc.import.file.use_neo4j_config=true
+      - NEO4J_AUTH=neo4j/neo4j123

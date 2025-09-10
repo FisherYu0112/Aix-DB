@@ -4,7 +4,6 @@ import logging
 import os
 import traceback
 from typing import Optional
-from uuid import uuid4
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.messages.utils import trim_messages

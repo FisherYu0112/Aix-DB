@@ -1,7 +1,5 @@
 <script lang="tsx" setup>
 import type { InputInst } from 'naive-ui'
-import { init } from 'echarts'
-import { backTopDark } from 'naive-ui'
 import { UAParser } from 'ua-parser-js'
 import * as GlobalAPI from '@/api'
 import { isMockDevelopment } from '@/config'
@@ -140,9 +138,9 @@ const onCompletedReader = (index: number) => {
   }
 
   // 查询是推荐列表
-  if (isView.value == false
-    && qa_type.value != 'COMMON_QA'
-    && qa_type.value != 'DATABASE_QA') {
+  if (isView.value === false
+    && qa_type.value !== 'COMMON_QA'
+    && qa_type.value !== 'DATABASE_QA') {
     query_dify_suggested()
   }
 }
@@ -382,7 +380,7 @@ const handleCreateStylized = async (send_text = '') => {
 
 // 滚动到底部
 const scrollToBottom = () => {
-  if (isView.value == false) {
+  if (isView.value === false) {
     nextTick(() => {
       if (messagesContainer.value) {
         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -736,6 +734,49 @@ const collapsed = useLocalStorage(
 
 // 背景颜色 默认页面和内容页面动态调整
 const backgroundColorVariable = ref('#ffffff')
+
+
+// 添加一键滚动到底部功能的相关代码
+const showScrollToBottom = ref(false)
+const scrollThreshold = 1000 // 滚动超过100px时显示按钮
+
+// 用户点击图标滚动到底部
+const clickScrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      showScrollToBottom.value = false // 滚动到底部后隐藏按钮
+    }
+  })
+}
+
+// ======新增：检查是否需要显示滚动到底部按钮==========//
+const checkScrollPosition = () => {
+  if (messagesContainer.value) {
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10 // 10px的容差
+    showScrollToBottom.value = !isAtBottom && scrollTop > scrollThreshold
+  }
+}
+// 新增：监听滚动事件
+const handleScroll = () => {
+  checkScrollPosition()
+}
+
+// 在 onMounted 或 onBeforeMount 中添加事件监听
+onMounted(() => {
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', handleScroll)
+  }
+})
+
+// 在组件卸载前移除事件监听
+onBeforeUnmount(() => {
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', handleScroll)
+  }
+})
+// ===============================================//
 </script>
 
 <template>
@@ -906,6 +947,7 @@ const backgroundColorVariable = ref('#ffffff')
             pb-20
             class="scrollable-container"
             :style="{ backgroundColor: backgroundColorVariable }"
+            @scroll="handleScroll"
           >
             <!-- 默认对话页面 -->
             <transition name="fade">
@@ -1017,6 +1059,14 @@ const backgroundColorVariable = ref('#ffffff')
                 @suggested="onSuggested"
               />
             </div>
+          </div>
+
+          <div
+            v-show="showScrollToBottom"
+            class="scroll-to-bottom-btn"
+            @click="clickScrollToBottom"
+          >
+            <div class="i-mingcute:arrow-down-fill"></div>
           </div>
 
           <div
@@ -1489,5 +1539,62 @@ const backgroundColorVariable = ref('#ffffff')
 .scrollable-table-container::-webkit-scrollbar-thumb {
   background-color: #bfbfbf; /* 滚动条颜色 */
   border-radius: 3px; /* 滚动条圆角 */
+}
+
+/* 一键到底部按钮样式，底部居中显示 */
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 145px; /* 距离底部的距离 */
+  left: 50%;
+  transform: translateX(-50%); /* 水平居中 */
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #fff;
+  box-shadow: 0 4px 15px rgb(0 0 0 / 20%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.3s ease;
+  border: 1px solid #e8eaf3;
+  backdrop-filter: blur(5px);
+}
+
+.scroll-to-bottom-btn:hover {
+  background-color: #f6f7fb;
+  transform: translateX(-50%) scale(1.1); /* 悬停时放大 */
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+}
+
+.scroll-to-bottom-btn::before {
+  content: "";
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
 }
 </style>

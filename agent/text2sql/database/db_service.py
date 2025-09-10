@@ -1,3 +1,8 @@
+import json
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, module="jieba")
+
 import logging
 import re
 from typing import Dict, List, Any, Optional
@@ -27,10 +32,12 @@ class DatabaseService:
     def _tokenize_text(text_str: str) -> List[str]:
         """
         :param text_str
+        https://github.com/fxsjy/jieba
         对文本进行中文/英文分词，过滤标点符号。
         """
         filtered_text = re.sub(r"[^\u4e00-\u9fa5a-zA-Z0-9]", " ", text_str)
-        tokens = jieba.lcut(filtered_text)
+        tokens = jieba.lcut(filtered_text, cut_all=False)
+        # print(tokens)
         return [token.strip() for token in tokens if token.strip()]
 
     def _get_table_comment(self, table_name: str) -> str:
@@ -69,7 +76,7 @@ class DatabaseService:
         # 添加列信息：列名 + 中文名 + 注释
         for col_name, col_info in table_info.get("columns", {}).items():
             parts.append(col_name)
-            parts.append(col_info.get("cn_name", ""))
+            # parts.append(col_info.get("cn_name", ""))
             parts.append(col_info.get("comment", ""))
 
         return " ".join(parts)
@@ -91,7 +98,7 @@ class DatabaseService:
                     columns[col["name"]] = {
                         "type": str(col["type"]),
                         "comment": comment,
-                        "cn_name": comment,
+                        # "cn_name": comment,
                     }
 
                 # 获取外键
@@ -160,6 +167,12 @@ class DatabaseService:
             key=lambda x: x[1],
             reverse=True,
         )
+
+        # 输出查询和得分日志
+        print(f"\n🔍 查询: {user_query}")
+        for idx, score in scored_tables[:5]:
+            table_name = table_names[idx]
+            print(f" ✅ {table_name:12} | 得分: {score:.4f}")
 
         # 动态阈值：保留得分 > 最高分 10% 的表，最多返回 5 个
         if not scored_tables:
