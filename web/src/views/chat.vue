@@ -247,7 +247,11 @@ const checkAllFilesUploaded = () => {
 
   // 新增：数据问答不支持文件上传
   if (qa_type.value === 'DATABASE_QA' && pendingFiles.length > 0) {
-    window.$ModalMessage.warning('数据问答不支持文件上传，请切换到其他智能问答')
+    window.$ModalMessage.warning('数据问答不支持文件上传，请切换到智能问答和表格问答')
+    return false
+  }
+  if (qa_type.value === 'REPORT_QA' && pendingFiles.length > 0) {
+    window.$ModalMessage.warning('深度搜索暂不支持文件上传(你可以输入“大模型”)，功能正在开发中..')
     return false
   }
 
@@ -372,7 +376,7 @@ const handleCreateStylized = async (send_text = '') => {
       chat_id: uuids.value[qa_type.value],
       qa_type: qa_type.value,
       question: textContent,
-      file_key: businessStore.$state.file_list,
+      file_key: upload_file_list,
       role: 'user',
       reader: null,
     })

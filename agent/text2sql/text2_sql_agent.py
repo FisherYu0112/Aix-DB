@@ -95,6 +95,7 @@ class Text2SqlAgent:
                     t04_answer_data,
                     DiFyAppEnum.DATABASE_QA.value[0],
                     user_token,
+                    {},
                 )
 
         except asyncio.CancelledError:
@@ -121,10 +122,10 @@ class Text2SqlAgent:
                 if current_step is not None and current_step not in ["summarize", "data_render", "data_render_apache"]:
                     await self._close_current_step(response, t02_answer_data)
 
-                # 打开新的步骤 (除了 summarize 和 data_render)
+                # 打开新的步骤 (除了 summarize 和 data_render) think_html 标签里面添加open属性控制思考过程是否默认展开显示
                 if new_step not in ["summarize", "data_render", "data_render_apache"]:
                     think_html = f"""<details style="color:gray;background-color: #f8f8f8;padding: 2px;border-radius: 
-                    6px;margin-top:5px;" open>
+                    6px;margin-top:5px;">
                                  <summary>{new_step}...</summary>"""
                     await self._send_response(response, think_html, "continue", "t02")
                     t02_answer_data.append(think_html)

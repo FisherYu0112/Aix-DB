@@ -134,8 +134,8 @@ export const fetchConversationHistory = async function fetchConversationHistory(
           let qa_type_str = ''
           // 对话id
           let chat_id_str = ''
-          // 文件key
-          let file_key_str = ''
+          // 文件keys
+          let file_key_json = []
           // 自定义id
           let uuid_str = ''
           const streamDataArray: StreamData[] = [];
@@ -160,7 +160,10 @@ export const fetchConversationHistory = async function fetchConversationHistory(
                   chat_id_str = record[key]
                   break
                 case 'file_key':
-                  file_key_str = record[key]
+                  console.log(record[key])
+                  if (record[key]) {
+                    file_key_json = JSON.parse(record[key])
+                  }
                   break
                 case 'question':
                   question_str = record[key]
@@ -207,7 +210,7 @@ export const fetchConversationHistory = async function fetchConversationHistory(
                 chat_id: chat_id_str,
                 qa_type: qa_type_str,
                 question: question_str,
-                file_key: [],
+                file_key: file_key_json,
                 role: 'user',
                 reader: null,
               })
@@ -216,7 +219,7 @@ export const fetchConversationHistory = async function fetchConversationHistory(
                 chat_id: chat_id_str,
                 qa_type: qa_type_str,
                 question: question_str,
-                file_key: file_key_str,
+                file_key: [],
                 role: 'assistant',
                 reader,
               })

@@ -78,18 +78,18 @@ class DiFyRequest:
             if token.startswith("Bearer "):
                 token = token.split(" ")[1]
 
-            # 封装问答上下文信息
-            qa_context = QaContext(token, cleaned_query, chat_id)
-
             # 调用智能体
             if qa_type == DiFyAppEnum.COMMON_QA.value[0]:
-                await agent.run_agent(query, res, chat_id, uuid_str, token)
+                await agent.run_agent(query, res, chat_id, uuid_str, token, file_list)
                 return None
             elif qa_type == DiFyAppEnum.DATABASE_QA.value[0]:
                 await sql_agent.run_agent(query, res, chat_id, uuid_str, token)
                 return None
             elif qa_type == DiFyAppEnum.FILEDATA_QA.value[0]:
                 cleaned_query = file_list[0]["source_file_key"] + "|" + query
+
+            # 封装问答上下文信息
+            qa_context = QaContext(token, cleaned_query, chat_id)
 
             # 判断请求类别
             app_key = self._get_authorization_token(qa_type)
@@ -218,6 +218,7 @@ class DiFyRequest:
                                             task_id,
                                             qa_type,
                                             uuid_str,
+                                            file_list,
                                         )
                                     if t04_answer_data:
                                         await self._save_message(
@@ -228,6 +229,7 @@ class DiFyRequest:
                                             task_id,
                                             qa_type,
                                             uuid_str,
+                                            file_list,
                                         )
 
                                     t02_answer_data = []
@@ -241,7 +243,7 @@ class DiFyRequest:
             await self.res_end(res)
 
     @staticmethod
-    async def _save_message(message, qa_context, conversation_id, message_id, task_id, qa_type, uuid_str):
+    async def _save_message(message, qa_context, conversation_id, message_id, task_id, qa_type, uuid_str, file_list):
         """
             保存消息记录并发送SSE数据
         :param message:
@@ -250,6 +252,7 @@ class DiFyRequest:
         :param message_id:
         :param task_id:
         :param qa_type:
+        :param file_list 用户上传的附件信息
         :return:
         """
         # 保存用户问答记录 1.保存用户问题 2.保存用户答案 t02 和 t04
@@ -265,6 +268,7 @@ class DiFyRequest:
                 message,
                 "",
                 qa_type,
+                file_list,
             )
         elif message["dataType"] == DataTypeEnum.BUS_DATA.value[0]:
             await add_question_record(
@@ -278,6 +282,7 @@ class DiFyRequest:
                 "",
                 message,
                 qa_type,
+                file_list,
             )
 
     @staticmethod

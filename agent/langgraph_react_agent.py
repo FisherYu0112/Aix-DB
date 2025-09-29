@@ -118,7 +118,13 @@ class LangGraphReactAgent:
         return {"llm_input_messages": trimmed_messages}
 
     async def run_agent(
-        self, query: str, response, session_id: Optional[str] = None, uuid_str: str = None, user_token=None
+        self,
+        query: str,
+        response,
+        session_id: Optional[str] = None,
+        uuid_str: str = None,
+        user_token=None,
+        file_list: dict = None,
     ):
         """
         运行智能体，支持多轮对话记忆
@@ -126,9 +132,13 @@ class LangGraphReactAgent:
         :param response: 响应对象
         :param session_id: 会话ID，用于区分同一轮对话
         :param uuid_str: 自定义ID，用于唯一标识一次问答
+        :param file_list: 附件
         :param user_token:
         :return:
         """
+
+        if file_list:
+            await response.write(self._create_response("\n> ✅正在阅读文档..."))
 
         # 获取用户信息 标识对话状态
         user_dict = await decode_jwt_token(user_token)
@@ -293,7 +303,14 @@ class LangGraphReactAgent:
             # 只有在未取消的情况下才保存记录
             if not self.running_tasks[task_id]["cancelled"]:
                 await add_user_record(
-                    uuid_str, session_id, query, t02_answer_data, {}, DiFyAppEnum.COMMON_QA.value[0], user_token
+                    uuid_str,
+                    session_id,
+                    query,
+                    t02_answer_data,
+                    {},
+                    DiFyAppEnum.COMMON_QA.value[0],
+                    user_token,
+                    file_list,
                 )
 
         except asyncio.CancelledError:
