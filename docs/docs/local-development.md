@@ -39,6 +39,10 @@ Settings -> Project: sanic-web -> Project Interpreter -> Add -> Existing environ
     - 可修改**MODEL_API_KEY** 大模型服务API-KEY
     - 可修改**MINIO_ENDPOINT** MinIO服务地址
     - 可修改**DIFY_SERVER_URL** Dify服务地址
+    - 可修改**SHOW_THINKING_PROCESS** 是否显示大模型思考过程
+    - 可修改**NEO4J_URI**  Neo4j数据库连接地址
+    - 可修改**NEO4J_USER** Neo4j数据库用户名
+    - 可修改**NEO4J_PASSWORD** Neo4j数据库密码
     - **必须修改MINIO_ACCESS_KEY** MinIO服务Key
     - **必须修改MINIO_SECRET_KEY** MinIO服务密钥
     - **必须修改DIFY_DATABASE_QA_API_KEY** Dify智能体Api-Key
