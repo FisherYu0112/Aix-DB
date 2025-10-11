@@ -18,7 +18,7 @@ web-build:
 
 # 构建服务端镜像
 service-build:
-		docker build --no-cache -t $(SERVER_DOCKER_IMAGE) -f ./docker/Dockerfile .
+	docker build --no-cache -t $(SERVER_DOCKER_IMAGE) -f ./docker/Dockerfile .
 
 
 # 构建 服务端arm64/amd64架构镜像并推送docker-hub
