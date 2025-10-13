@@ -175,9 +175,9 @@ npx -y 12306-mcp
 ![image](images/12306-group-url.png)
 
 
-### 🌿 Noe4j
-> Noe4j是一个开源的图数据库，用于存储和查询关系数据。
-> Noe4j的安装和配置请参考[官方文档](https://neo4j.com/docs/operations-manual/current/installation/)
+### 🌿 Neo4j
+> Neo4j是一个开源的图数据库，用于存储和查询关系数据。
+> Neo4j的安装和配置请参考[官方文档](https://neo4j.com/docs/operations-manual/current/installation/)
 #### 启动
 ```angular2html
 cd docker
