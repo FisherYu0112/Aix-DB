@@ -3,10 +3,9 @@ services:
     image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/chat-vue3-mvp:1.1.9
     container_name: chat-vue3-mvp
     environment:
-      DOCKER_HOST_INTERNAL: ${DOCKER_HOST_INTERNAL:-}
       TZ: Asia/Shanghai
     volumes:
-      - ./nginx.conf.template:/etc/nginx/conf.d/nginx.conf.template
+      - ./nginx.conf.template:/etc/nginx/conf.d/default.conf
     ports:
       - "8081:80"
     extra_hosts:
@@ -31,7 +30,7 @@ services:
     image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/sanic-web:1.1.9
     container_name: sanic-web
     environment:
-      SERVER_PORT: ${SERVER_PORT:-8088}
+      SERVER_PORT: ${SERVER_PORT:-8089}
       SERVER_WORKERS: ${SERVER_WORKERS:-2}
       MYSQL_HOST: ${MYSQL_HOST:-}
       MYSQL_PORT: ${MYSQL_PORT:-}
@@ -57,7 +56,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       TZ: Asia/Shanghai
     ports:
-      - "8088:8088"
+      - "${SERVER_PORT:-8089}:${SERVER_PORT:-8089}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
