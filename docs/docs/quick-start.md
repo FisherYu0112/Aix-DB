@@ -1,8 +1,13 @@
 确保上一步[环境配置](environment.md)已配置好
 
 ## 1. **环境配置**
-> cd docker 编辑.env文件
+进入docker目录，复制.env.template文件为.env，然后根据下面配置修改.env文件
+```bash
+cd docker 
+cp .env.template .env 
+```
 
+> 编辑.env文件
 ### 1.1. **服务IP修改**
 - 本地部署不要修改、服务器部署时配置成实际IP地址
 ```angular2html
