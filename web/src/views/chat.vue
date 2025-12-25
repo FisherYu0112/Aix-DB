@@ -782,10 +782,12 @@ const handleSearch = () => {
 }
 
 const handleClear = () => {
+  // 主动清空输入并带着空搜索刷新历史，确保搜索条件被移除
+  searchText.value = ''
   if (!showDefaultPage.value) {
     newChat()
   }
-  loadHistoryList({ reset: true })
+  loadHistoryList({ reset: true, search: '' })
 }
 
 // 对话历史滚动加载
