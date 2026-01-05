@@ -1,12 +1,40 @@
 import json
 import logging
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime
 from enum import Enum
 import re
 import traceback
 from typing import Dict, Any, List
 
-from common.mysql_util import MysqlUtil
+from sqlalchemy import text
+from model.db_connection_pool import get_db_pool
+
+pool = get_db_pool()
+
+
+def execute_sql_dict(sql: str) -> List[dict]:
+    """
+    执行 SQL 查询并返回字典列表
+    :param sql: SQL 查询语句
+    :return: 字典列表
+    """
+    with pool.get_session() as session:
+        result = session.execute(text(sql))
+        rows = result.fetchall()
+        columns = result.keys()
+        
+        result_list = []
+        for row in rows:
+            row_dict = {}
+            for i, col in enumerate(columns):
+                value = row[i]
+                # 处理日期时间类型
+                if isinstance(value, datetime):
+                    value = value.strftime("%Y-%m-%d %H:%M:%S")
+                row_dict[col] = value
+            result_list.append(row_dict)
+        return result_list
 
 
 class ChartTypeEnum(Enum):
@@ -297,7 +325,7 @@ async def select_report_by_title(title: str) -> str:
     :return:
     """
     sql = f"""select markdown from t_report_info where title like '%{title}%'  order by create_time desc limit 1"""
-    report_dict = MysqlUtil().query_mysql_dict(sql)
+    report_dict = execute_sql_dict(sql)
     if len(report_dict) > 0:
         return report_dict[0]["markdown"].replace("```markdown", "").replace("```", "")
     else:

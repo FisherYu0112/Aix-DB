@@ -1,17 +1,109 @@
 import io
 import json
 import logging
+from datetime import datetime
 
 import duckdb
 import pandas as pd
 import requests
+from sqlalchemy import text
+
 from common.date_util import DateEncoder
 from common.exception import MyException
 from common.minio_util import MinioUtils
-from common.mysql_util import MysqlUtil
 from constants.code_enum import SysCodeEnum as SysCode
+from model.db_connection_pool import get_db_pool
 
 logger = logging.getLogger(__name__)
+
+pool = get_db_pool()
+
+
+def query_ex(query: str) -> dict:
+    """
+    Execute SQL and return column desc and result
+    Args:
+        query SQL query to run
+    Returns:
+        dict: {"column":[],result:[]}
+    """
+    logger.info(f"query_sql: {query}")
+    if not query:
+        return {"column": [], "result": []}
+
+    try:
+        with pool.get_session() as session:
+            result = session.execute(text(query))
+            rows = result.fetchall()
+            columns = list(result.keys())
+
+            # 将查询结果转换为指定格式
+            result_list = []
+            for row in rows:
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    value = row[i]
+                    if isinstance(value, datetime):
+                        value = value.strftime("%Y-%m-%d %H:%M:%S")
+                    row_dict[col] = value
+                result_list.append(row_dict)
+
+            return {"column": columns, "result": result_list}
+    except Exception as e:
+        logger.error(f"query_ex error query_sql: {query},{e}")
+        return None
+
+
+def get_multiple_tables_column_comments(tables, dbname="dap") -> dict:
+    """
+    获取mysql表schema信息
+    Args:
+        tables 表名称列表
+        dbname 数据库名称
+    Return:
+        {
+          "schema": [
+            {
+              "tableName": "table_1",
+              "schema": [
+                {
+                  "column": "name",
+                  "comment": "姓名"
+                }
+              ]
+            }
+          ]
+        }
+    """
+    try:
+        result_data = {"schema": []}
+        with pool.get_session() as session:
+            for table in tables:
+                # 查询每个表的列信息及注释
+                sql = f"""
+                        SELECT COLUMN_NAME AS `column`, COLUMN_COMMENT AS `comment`
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = '{dbname}' AND TABLE_NAME = '{table}';
+                        """
+                result = session.execute(text(sql))
+                rows = result.fetchall()
+                columns = list(result.keys())
+
+                # 获取查询结果并构造字典
+                columns_info = []
+                for row in rows:
+                    col_dict = {}
+                    for i, col in enumerate(columns):
+                        col_dict[col] = row[i]
+                    columns_info.append({"column": col_dict["column"], "comment": col_dict["comment"]})
+
+                # 将当前表的列信息添加到结果数据中
+                result_data["schema"].append({"tableName": table, "schemaData": columns_info})
+
+        return result_data
+    except Exception as e:
+        logger.error(f"get_multiple_tables_column_comments error {e}")
+        return {"schema": []}
 
 
 async def exe_sql_query(model_out_str):
@@ -31,8 +123,8 @@ async def exe_sql_query(model_out_str):
                 model_out_json = json.loads(model_out_json)
             sql = model_out_json["sql"]
             if sql:
-                result = MysqlUtil().query_ex(sql)
-                table_schema_dict = MysqlUtil().get_multiple_tables_column_comments(["view_alarm_detail"])
+                result = query_ex(sql)
+                table_schema_dict = get_multiple_tables_column_comments(["view_alarm_detail"])
                 table_schema_dict["llm"] = model_out_json
                 table_schema_dict["data"] = result
                 return json.dumps(table_schema_dict, ensure_ascii=False, cls=DateEncoder)

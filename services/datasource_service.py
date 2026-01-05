@@ -13,6 +13,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from model.datasource_models import Datasource, DatasourceTable, DatasourceField
+from model.db_connection_pool import get_db_pool
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +425,54 @@ class DatasourceService:
             logger.warning(f"同步表关系到 Neo4j 失败: {e}")
         return True
 
+    @staticmethod
+    def get_table_relation(session: Session, ds_id: int) -> Optional[List[Dict[str, Any]]]:
+        """获取表关系"""
+        datasource = session.query(Datasource).filter(Datasource.id == ds_id).first()
+        if not datasource:
+            return []
+
+        return datasource.table_relation if datasource.table_relation else []
+
+    @staticmethod
+    def get_neo4j_relation(ds_id: int) -> List[Dict[str, Any]]:
+        """
+        从 Neo4j 获取数据源的表关系数据
+        返回格式: [{"from_table": str, "to_table": str, "field_relation": str}, ...]
+        """
+        try:
+            uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+            user = os.getenv("NEO4J_USER", "neo4j")
+            password = os.getenv("NEO4J_PASSWORD", "neo4j123")
+
+            graph = Graph(uri, auth=(user, password))
+
+            # 首先获取该数据源的所有表名
+            db_pool = get_db_pool()
+            with db_pool.get_session() as session:
+                tables = DatasourceService.get_tables_by_ds_id(session, ds_id)
+                table_names = [table.table_name for table in tables]
+
+            if not table_names:
+                return []
+
+            # 查询 Neo4j 中这些表之间的关系
+            query = """
+            MATCH (t1:Table)-[r:REFERENCES]->(t2:Table)
+            WHERE t1.name IN $table_names AND t2.name IN $table_names
+            RETURN 
+              t1.name AS from_table,
+              t2.name AS to_table,
+              r.field_relation AS field_relation
+            ORDER BY t1.name, t2.name
+            """
+
+            result = graph.run(query, table_names=table_names).data()
+            return result if result else []
+        except Exception as e:
+            logger.error(f"获取 Neo4j 关系失败: {e}", exc_info=True)
+            return []
+
 
 def sync_table_relation_to_neo4j(relation_data: List[Dict[str, Any]]):
     """
@@ -503,12 +552,3 @@ def sync_table_relation_to_neo4j(relation_data: List[Dict[str, Any]]):
             target_table=target_table,
             field_relation=field_relation,
         )
-
-    @staticmethod
-    def get_table_relation(session: Session, ds_id: int) -> Optional[List[Dict[str, Any]]]:
-        """获取表关系"""
-        datasource = session.query(Datasource).filter(Datasource.id == ds_id).first()
-        if not datasource:
-            return []
-
-        return datasource.table_relation if datasource.table_relation else []

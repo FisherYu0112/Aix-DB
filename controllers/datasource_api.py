@@ -488,3 +488,18 @@ async def get_table_relation(req: request.Request, ds_id: int):
     except Exception as e:
         logger.error(f"获取表关系失败: {e}", exc_info=True)
         raise MyException(SysCodeEnum.SYSTEM_ERROR, f"获取表关系失败: {str(e)}")
+
+
+@bp.post("/getNeo4jRelation/<ds_id:int>")
+@openapi.summary("获取 Neo4j 图数据库关系")
+@openapi.description("从 Neo4j 图数据库获取数据源的表关系数据")
+@openapi.tag("数据源管理")
+@async_json_resp
+async def get_neo4j_relation(req: request.Request, ds_id: int):
+    """获取 Neo4j 图数据库关系"""
+    try:
+        relation_data = DatasourceService.get_neo4j_relation(ds_id)
+        return relation_data or []
+    except Exception as e:
+        logger.error(f"获取 Neo4j 关系失败: {e}", exc_info=True)
+        raise MyException(SysCodeEnum.SYSTEM_ERROR, f"获取 Neo4j 关系失败: {str(e)}")

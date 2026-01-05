@@ -7,10 +7,10 @@ from typing import List, Any
 
 import jwt
 import requests
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from common.exception import MyException
-from common.mysql_util import MysqlUtil
 from constants.code_enum import SysCodeEnum, DiFyAppEnum, DataTypeEnum
 from constants.dify_rest_api import DiFyRestApi
 from model.db_connection_pool import get_db_pool
@@ -19,8 +19,63 @@ from model.serializers import model_to_dict
 
 logger = logging.getLogger(__name__)
 
-mysql_client = MysqlUtil()
 pool = get_db_pool()
+
+
+def execute_sql_dict(sql: str, params: tuple = None) -> List[dict]:
+    """
+    执行 SQL 查询并返回字典列表
+    :param sql: SQL 查询语句（支持 %s 占位符）
+    :param params: 参数元组（可选）
+    :return: 字典列表
+    """
+    with pool.get_session() as session:
+        if params:
+            # 将 %s 占位符转换为命名参数
+            param_dict = {f"param_{i}": val for i, val in enumerate(params)}
+            # 替换 %s 为命名参数
+            sql_with_params = sql
+            for i in range(len(params)):
+                sql_with_params = sql_with_params.replace("%s", f":param_{i}", 1)
+            result = session.execute(text(sql_with_params), param_dict)
+        else:
+            result = session.execute(text(sql))
+        rows = result.fetchall()
+        columns = result.keys()
+        
+        result_list = []
+        for row in rows:
+            row_dict = {}
+            for i, col in enumerate(columns):
+                value = row[i]
+                # 处理日期时间类型
+                if isinstance(value, datetime):
+                    value = value.strftime("%Y-%m-%d %H:%M:%S")
+                row_dict[col] = value
+            result_list.append(row_dict)
+        return result_list
+
+
+def execute_sql_update(sql: str, params: tuple = None):
+    """
+    执行 SQL 更新/插入/删除操作
+    :param sql: SQL 语句（支持 %s 占位符）
+    :param params: 参数元组（可选）
+    :return: 影响的行数
+    """
+    with pool.get_session() as session:
+        if params:
+            # 将 %s 占位符转换为命名参数
+            param_dict = {f"param_{i}": val for i, val in enumerate(params)}
+            # 替换 %s 为命名参数
+            sql_with_params = sql
+            for i in range(len(params)):
+                sql_with_params = sql_with_params.replace("%s", f":param_{i}", 1)
+            result = session.execute(text(sql_with_params), param_dict)
+        else:
+            result = session.execute(text(sql))
+        session.commit()
+        return result.rowcount
 
 
 async def authenticate_user(username, password):
@@ -132,15 +187,15 @@ async def add_question_record(
             question = question.split("|")[1]
 
         sql = f"select * from t_user_qa_record where user_id={user_id} and chat_id='{chat_id}' and message_id='{message_id}'"
-        log_dict = mysql_client.query_mysql_dict(sql)
+        log_dict = execute_sql_dict(sql)
 
         # 根据 message_id 判断是否是同一个问题
         if len(log_dict) > 0:
             sql = f"""update t_user_qa_record set to4_answer='{json.dumps(t04_answer, ensure_ascii=False)}' 
                     where user_id={user_id} and chat_id='{chat_id}' and message_id='{message_id}'"""
-            mysql_client.update(sql)
+            execute_sql_update(sql)
         else:
-            insert_params = [
+            insert_params = (
                 uuid_str,
                 user_id,
                 conversation_id,
@@ -151,12 +206,12 @@ async def add_question_record(
                 json.dumps(t02_answer, ensure_ascii=False),
                 qa_type,
                 file_key,
-            ]
+            )
             sql = (
                 f" insert into t_user_qa_record(uuid,user_id,conversation_id, message_id, task_id,chat_id,question,to2_answer,qa_type,file_key) "
                 f"values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
             )
-            mysql_client.insert(sql=sql, params=insert_params)
+            execute_sql_update(sql, insert_params)
 
     except Exception as e:
         traceback.print_exception(e)
@@ -197,7 +252,7 @@ async def add_user_record(
             (uuid, user_id, chat_id, question, to2_answer,to4_answer, qa_type,file_key)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
-        insert_params = [
+        insert_params = (
             uuid_str,
             user_id,
             chat_id,
@@ -206,10 +261,9 @@ async def add_user_record(
             json.dumps(to4_answer, ensure_ascii=False),
             qa_type,
             json.dumps(file_list, ensure_ascii=False) if file_list and len(file_list) > 0 else "",
-        ]
+        )
 
-        # 如果 mysql_client.insert 是异步方法
-        mysql_client.insert(sql=insert_sql, params=insert_params)
+        execute_sql_update(sql=insert_sql, params=insert_params)
 
     except Exception as e:
         # 建议替换成项目的日志系统
@@ -236,10 +290,10 @@ async def delete_user_record(user_id, record_ids):
     """
 
     # 将 user_id 添加到参数列表的开头
-    params = [user_id] + record_ids
+    params = tuple([user_id] + record_ids)
 
     # 执行更新操作
-    mysql_client.update_params(sql=sql, params=params)
+    execute_sql_update(sql=sql, params=params)
 
 
 async def query_user_record(user_id, page, limit, search_text, chat_id):
@@ -270,7 +324,7 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
         count_sql = "SELECT COUNT(1) as count FROM t_user_qa_record"
         if conditions:
             count_sql += " WHERE " + " AND ".join(conditions)
-        total_count_result = mysql_client.query_mysql_dict(count_sql)
+        total_count_result = execute_sql_dict(count_sql)
         total_count = total_count_result[0]["count"] if total_count_result else 0
         total_pages = (total_count + limit - 1) // limit
 
@@ -278,7 +332,7 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
         if conditions:
             records_sql += " WHERE " + " AND ".join(conditions)
         records_sql += f" ORDER BY id ASC LIMIT {limit} OFFSET {offset}"
-        records = mysql_client.query_mysql_dict(records_sql)
+        records = execute_sql_dict(records_sql)
     else:
         # 如果chat_id为空，则需要去重，根据chat_id取id最小的记录
         base_condition = ""
@@ -293,7 +347,7 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
                 GROUP BY chat_id
             ) as distinct_chats
         """
-        total_count_result = mysql_client.query_mysql_dict(count_sql)
+        total_count_result = execute_sql_dict(count_sql)
         total_count = total_count_result[0]["count"] if total_count_result else 0
         total_pages = (total_count + limit - 1) // limit
 
@@ -309,7 +363,7 @@ async def query_user_record(user_id, page, limit, search_text, chat_id):
             ORDER BY t.id DESC 
             LIMIT {limit} OFFSET {offset}
         """
-        records = mysql_client.query_mysql_dict(records_sql)
+        records = execute_sql_dict(records_sql)
 
     return {"records": records, "current_page": page, "total_pages": total_pages, "total_count": total_count}
 
