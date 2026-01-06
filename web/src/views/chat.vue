@@ -1,5 +1,6 @@
 <script lang="tsx" setup>
 import type { InputInst, UploadFileInfo } from 'naive-ui'
+// Import Cookies to clear token on logout
 import { UAParser } from 'ua-parser-js'
 import * as GlobalAPI from '@/api'
 import { isMockDevelopment } from '@/config'
@@ -7,11 +8,13 @@ import DefaultPage from './DefaultPage.vue'
 import FileListItem from './FileListItem.vue'
 import FileUploadManager from './FileUploadManager.vue'
 import SuggestedView from './SuggestedPage.vue'
+
 import TableModal from './TableModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const userStore = useUserStore()
 
 // 显示默认页面
 const showDefaultPage = ref(true)
@@ -122,13 +125,6 @@ const onCompletedReader = (index: number) => {
       }
     })
   }
-
-  // 查询是推荐列表
-  // if (isView.value === false
-  //   && qa_type.value !== 'COMMON_QA'
-  //   && qa_type.value !== 'DATABASE_QA') {
-  //   //  query_dify_suggested()
-  // }
 }
 
 // 当前索引位置
@@ -242,11 +238,6 @@ const checkAllFilesUploaded = () => {
 
   // 新增：表格问答只支持单个excel文件
   if (qa_type.value === 'FILEDATA_QA') {
-    // if (pendingFiles.length > 1) {
-    //   window.$ModalMessage.warning('表格问答只支持上传单个文件')
-    //   return false
-    // }
-
     if (pendingFiles.length === 1) {
       const file = pendingFiles[0]
       const fileName = file.name?.toLowerCase() || ''
@@ -277,12 +268,10 @@ const handleCreateStylized = async (
     parse_file_key: string
     file_size: string
   }[] = [],
+  qa_type_arg: string | null = null,
 ) => {
-  // if (qa_type.value === 'REPORT_QA') {
-  //   window.$ModalMessage.warning('深度搜索功能暂不支持，功能正在开发中..')
-  //   inputTextString.value = ''
-  //   return
-  // }
+  // Use passed qa_type or current reactive value
+  const currentQaType = qa_type_arg || qa_type.value
 
   // 设置背景颜色
   backgroundColorVariable.value = '#f6f7fb'
@@ -302,7 +291,7 @@ const handleCreateStylized = async (
   // 若正在加载，则点击后恢复初始状态
   if (stylizingLoading.value) {
     // 停止dify 对话
-    await GlobalAPI.stop_chat(businessStore.$state.task_id, qa_type.value)
+    await GlobalAPI.stop_chat(businessStore.$state.task_id, currentQaType)
     onCompletedReader(conversationItems.value.length - 1)
     // 隐藏加载提示动画
     contentLoadingStates.value = contentLoadingStates.value.map(() => false)
@@ -321,8 +310,6 @@ const handleCreateStylized = async (
   let upload_file_list
   // 判断是否有未上传的文件
   if (fileUploadRef.value?.pendingUploadFileInfoList && fileUploadRef.value.pendingUploadFileInfoList.length > 0) {
-    // console.log(fileUploadRef.value.pendingUploadFileInfoList)
-    // console.log(businessStore.file_list)
     // 有一个文件解析失败不允许提交
     if (!checkAllFilesUploaded()) {
       return
@@ -336,7 +323,7 @@ const handleCreateStylized = async (
   }
 
   // 表格问答 则使用 上传的文件key实现 上传一次多轮对话的效果
-  if (qa_type.value === 'FILEDATA_QA' && businessStore.file_list.length > 0) {
+  if (currentQaType === 'FILEDATA_QA' && businessStore.file_list.length > 0) {
     upload_file_list = businessStore.file_list
   }
 
@@ -356,12 +343,12 @@ const handleCreateStylized = async (
   const newItem = {
     uuid: uuid_str, // 或者根据你的需求计算新的索引
     key: inputTextString.value ? inputTextString.value : send_text,
-    chat_id: uuids.value[qa_type.value],
-    qa_type: qa_type.value,
+    chat_id: uuids.value[currentQaType],
+    qa_type: currentQaType,
   }
 
   // 如果有相同的chat_id 则不添加 使用 unshift 方法将新元素添加到数组的最前面
-  const hasSameChatId = tableData.value.some((item) => item.chat_id === uuids.value[qa_type.value])
+  const hasSameChatId = tableData.value.some((item) => item.chat_id === uuids.value[currentQaType])
   if (!hasSameChatId) {
     tableData.value.unshift(newItem)
   }
@@ -373,16 +360,16 @@ const handleCreateStylized = async (
     : send_text
   inputTextString.value = ''
 
-  if (!uuids.value[qa_type.value]) {
-    uuids.value[qa_type.value] = uuidv4()
+  if (!uuids.value[currentQaType]) {
+    uuids.value[currentQaType] = uuidv4()
   }
 
   // 存储该轮用户对话消息
   if (textContent) {
     conversationItems.value.push({
       uuid: uuid_str,
-      chat_id: uuids.value[qa_type.value],
-      qa_type: qa_type.value,
+      chat_id: uuids.value[currentQaType],
+      qa_type: currentQaType,
       question: textContent,
       file_key: upload_file_list,
       role: 'user',
@@ -401,12 +388,13 @@ const handleCreateStylized = async (
   const { error, reader, needLogin }
     = await businessStore.createAssistantWriterStylized(
       uuid_str,
-      uuids.value[qa_type.value],
+      uuids.value[currentQaType],
       currentChatId.value,
       {
         text: textContent,
         writer_oid: currentChatId.value,
         file_list: upload_file_list,
+        qa_type: currentQaType, // Pass qa_type explicitly
       },
     )
 
@@ -438,8 +426,8 @@ const handleCreateStylized = async (
     outputTextReader.value = reader
     conversationItems.value.push({
       uuid: uuid_str,
-      chat_id: uuids.value[qa_type.value],
-      qa_type: qa_type.value,
+      chat_id: uuids.value[currentQaType],
+      qa_type: currentQaType,
       question: textContent,
       file_key: [],
       role: 'assistant',
@@ -552,54 +540,12 @@ const handleResetState = () => {
 handleResetState()
 
 
-// 下面方法用于左侧对话列表点击 右侧内容滚动
-// 用于存储每个 MarkdownPreview 容器的引用
+// 左侧对话列表点击
 // const markdownPreviews = ref<Array<HTMLElement | null>>([]) // 初始化为空数组
 const markdownPreviews = ref<Map<string, HTMLElement | null>>(new Map())
 
-
-// 表格行点击事件
-const currentIndex = ref<number | null>(null)
-const rowProps = (row: any) => {
-  return {
-    class: [
-      'cursor-pointer select-none',
-      currentIndex.value === row.uuid && 'selected-row',
-    ].join(' '),
-    onClick: async () => {
-      backgroundColorVariable.value = '#f6f7fb'
-
-      currentIndex.value = row.uuid
-      suggested_array.value = []
-
-      isInit.value = false
-      isView.value = true
-
-      // 这里根据chat_id 过滤同一轮对话数据
-      await fetchConversationHistory(
-        isInit,
-        conversationItems,
-        tableData,
-        currentRenderIndex,
-        row,
-        '',
-        1,
-        999999,
-        false,
-      )
-
-      // 关闭默认页面
-      showDefaultPage.value = false
-
-      //   等待 DOM 更新完成
-      await nextTick()
-      //  滚动到指定位置
-      scrollToItem(row.uuid)
-
-      onAqtiveChange(row.qa_type, row.chat_id)
-    },
-  }
-}
+// 表格行点击事件 (Updated type to string | null)
+const currentIndex = ref<string | null>(null)
 
 // 递归查找最底层的元素
 const findDeepestElement = (element: HTMLElement): HTMLElement => {
@@ -656,27 +602,11 @@ const onAqtiveChange = (val, chat_id) => {
   } else {
     uuids.value[val] = uuidv4()
   }
-
-  // 清空文件上传历史url
-  // if (val === 'FILEDATA_QA') {
-  //   businessStore.update_file_url('')
-  // }
 }
 
 // 获取建议问题
 const suggested_array = ref([])
-// const query_dify_suggested = async () => {
-//   if (!isInit.value) {
-//     const res = await GlobalAPI.dify_suggested(uuids.value[qa_type.value])
-//     const json = await res.json()
-//     if (json?.data?.data !== undefined) {
-//       suggested_array.value = json.data.data
-//     }
-//   }
 
-//   // 滚动到底部
-//   scrollToBottom()
-// }
 // 建议问题点击事件
 const onSuggested = (index: number) => {
   // 如果是报告问答的建议问题点击后切换到通用对话
@@ -686,34 +616,21 @@ const onSuggested = (index: number) => {
   handleCreateStylized(suggested_array.value[index])
 }
 
-// 侧边表格滚动条数 动态显示隐藏设置
-const scrollableContainer = useTemplateRef('scrollableContainer')
-
-const showScrollbar = () => {
-  if (
-    scrollableContainer.value
-    && scrollableContainer.value.$el
-    && scrollableContainer.value.$el.firstElementChild
-  ) {
-    scrollableContainer.value.$el.firstElementChild.style.overflowY = 'auto'
-  }
-}
-
-const hideScrollbar = () => {
-  if (
-    scrollableContainer.value
-    && scrollableContainer.value.$el
-    && scrollableContainer.value.$el.firstElementChild
-  ) {
-    scrollableContainer.value.$el.firstElementChild.style.overflowY
-            = 'hidden'
-  }
-}
+// 侧边表格滚动条数 动态显示隐藏设置 - REMOVED
+// const scrollableContainer = useTemplateRef('scrollableContainer')
+// const showScrollbar = ...
+// const hideScrollbar = ...
 
 const searchText = ref('')
 const searchChatRef = useTemplateRef('searchChatRef')
 const isFocusSearchChat = ref(false)
 const onFocusSearchChat = () => {
+  if (isFocusSearchChat.value) {
+    isFocusSearchChat.value = false
+    searchText.value = ''
+    loadHistoryList({ reset: true, search: '' })
+    return
+  }
   if (!showDefaultPage.value) {
     newChat()
   }
@@ -731,7 +648,7 @@ const onBlurSearchChat = () => {
 
 // 加载对话历史（支持滚动分页）
 async function loadHistoryList(
-  options: { reset?: boolean; search?: string } = {},
+  options: { reset?: boolean, search?: string } = {},
 ) {
   const { reset = false, search = searchText.value } = options
   if (isLoadingHistory.value || isLoadingMoreHistory.value) {
@@ -807,10 +724,7 @@ onBeforeMount(() => {
   loadHistoryList({ reset: true })
 })
 
-const collapsed = useLocalStorage(
-  'collapsed-chat-menu',
-  ref(false),
-)
+const collapsed = ref(false)
 
 // 背景颜色 默认页面和内容页面动态调整
 const backgroundColorVariable = ref('#ffffff')
@@ -867,172 +781,302 @@ const fileUploadRef = ref<FileUploadRef | null>(null)
 
 // 用于绑定文件上传信息列表
 const pendingUploadFileInfoList = ref([])
+
+// 新增：处理从DefaultPage来的提交
+const handleSubmitFromDefaultPage = (payload: { text: string, mode: string }) => {
+  onAqtiveChange(payload.mode, '') // Switch mode
+  inputTextString.value = payload.text // Set text
+  handleCreateStylized(payload.text, [], payload.mode) // Submit with explicit mode
+}
+
+// QA Options configuration (duplicated from DefaultPage for consistency in pill display)
+const qaOptions = [
+  { icon: 'i-hugeicons:ai-chat-02', label: '智能问答', value: 'COMMON_QA', color: '#3b82f6' },
+  { icon: 'i-hugeicons:database-01', label: '数据问答', value: 'DATABASE_QA', color: '#10b981' },
+  { icon: 'i-hugeicons:table-01', label: '表格问答', value: 'FILEDATA_QA', color: '#f59e0b' },
+  { icon: 'i-hugeicons:search-02', label: '深度搜索', value: 'REPORT_QA', color: '#8b5cf6' },
+]
+
+const currentQaOption = computed(() => {
+  return qaOptions.find((opt) => opt.value === qa_type.value)
+})
+
+const clearMode = () => {
+  // Maybe switch to default? Or just do nothing as chat needs a type?
+  // Let's switch to common if cleared
+  onAqtiveChange('COMMON_QA', '')
+}
+
+// Navigation Rail Items - REMOVED
+// const navRailItems = ...
+
+// Handle History Item Click (Replaces rowProps)
+const handleHistoryClick = async (item: any) => {
+  backgroundColorVariable.value = '#f6f7fb'
+
+  currentIndex.value = item.uuid
+  suggested_array.value = []
+
+  isInit.value = false
+  isView.value = true
+
+  // 这里根据chat_id 过滤同一轮对话数据
+  await fetchConversationHistory(
+    isInit,
+    conversationItems,
+    tableData,
+    currentRenderIndex,
+    item,
+    '',
+    1,
+    999999,
+    false,
+  )
+
+  // 关闭默认页面
+  showDefaultPage.value = false
+
+  //   等待 DOM 更新完成
+  await nextTick()
+  //  滚动到指定位置
+  scrollToItem(item.uuid)
+
+  onAqtiveChange(item.qa_type, item.chat_id)
+}
+
+// User Popup Logic
+const handleLogout = () => {
+  userStore.logout()
+  setTimeout(() => {
+    router.replace('/login')
+  }, 500)
+}
+
+const handleDataSourceManager = () => {
+  router.push({
+    name: 'DatasourceManager',
+  })
+}
 </script>
 
 <template>
-  <div
-    class="flex justify-between items-center h-full"
-  >
+  <div class="flex h-full w-full bg-[#f6f7fb]">
     <n-layout
-      ref="scrollableContainer"
-      class="custom-layout h-full"
+      class="h-full w-full"
       has-sider
-      :native-scrollbar="true"
-      @mouseenter="showScrollbar"
-      @mouseleave="hideScrollbar"
     >
       <n-layout-sider
         v-model:collapsed="collapsed"
         collapse-mode="width"
         :collapsed-width="0"
-        :width="260"
+        :width="280"
         :show-collapsed-content="false"
-        show-trigger="arrow-circle"
         bordered
+        class="qianwen-sidebar"
       >
-        <div
-          h-full
-          class="content"
-          flex="~ col"
-        >
-          <div
-            class="header p-20"
-            :style="{
-              'display': `flex`, /* 使用Flexbox布局 */
-              'align-items': `center`, /* 垂直居中对齐 */
-              'justify-content': `start`, /* 水平分布空间 */
-              'flex-shrink': `0`,
-              'position': `sticky`,
-              'top': `0`,
-              'z-index': `1`,
-            }"
-          >
+        <div class="sidebar-container flex flex-col h-full bg-[#F6F6F8]">
+          <!-- Header: Logo & Icons -->
+          <div class="sidebar-header px-6 py-6 flex justify-between items-center">
             <div
-              class="create-chat-box"
-              :class="{
-                hide: isFocusSearchChat,
-              }"
+              class="logo-area flex items-center gap-3 cursor-pointer"
+              @click="showDefaultPage = true"
             >
-              <n-button
-                type="primary"
-                icon-placement="left"
-                color="#3e2cff"
-                strong
-                class="create-chat"
-                :disabled="stylizingLoading"
-                @click="newChat"
-              >
-                <template #icon>
-                  <n-icon>
-                    <div class="i-hugeicons:add-01"></div>
-                  </n-icon>
-                </template>
-                新建对话
-              </n-button>
+              <div class="i-hugeicons:ai-chat-02 text-32 c-[#3B5CFF]"></div>
+              <span class="text-24 font-bold text-[#111111] tracking-tight font-sans">通问</span>
             </div>
-            <n-input
-              ref="searchChatRef"
-              v-model:value="searchText"
-              placeholder="搜索"
-              class="search-chat"
-              clearable
-              :class="{
-                focus: isFocusSearchChat,
-              }"
-              @click="onFocusSearchChat()"
-              @blur="onBlurSearchChat()"
-              @input="handleSearch()"
-              @keyup.enter="handleSearch()"
-              @clear="handleClear()"
-            >
-              <template #prefix>
-                <div class="i-hugeicons:search-01"></div>
-              </template>
-            </n-input>
+            <div class="header-actions flex items-center gap-5">
+              <div
+                class="action-icon i-hugeicons:search-01 text-24 text-[#8A8A8A] hover:text-[#333] cursor-pointer"
+                @click="onFocusSearchChat"
+              ></div>
+              <div
+                class="action-icon i-hugeicons:sidebar-left-01 text-24 text-[#8A8A8A] hover:text-[#333] cursor-pointer"
+                @click="collapsed = true"
+              ></div>
+            </div>
           </div>
+
+          <!-- New Chat Button -->
+          <div class="px-6 pb-6">
+            <div
+              v-if="isFocusSearchChat"
+              class="h-[54px] flex items-center"
+            >
+              <n-input
+                ref="searchChatRef"
+                v-model:value="searchText"
+                placeholder="搜索历史记录..."
+                class="w-full !rounded-[6px]"
+                :style="{ '--n-border-radius': '6px' }"
+                size="large"
+                clearable
+                @blur="onBlurSearchChat"
+                @input="handleSearch"
+                @clear="handleClear"
+              >
+                <template #prefix>
+                  <div class="i-hugeicons:search-01 text-gray-400"></div>
+                </template>
+              </n-input>
+            </div>
+            <button
+              v-else
+              class="new-chat-btn w-full py-3.5 rounded-[6px] bg-white border border-[#E6E6E6] shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] text-[#0D1220] font-medium text-16 flex items-center justify-center gap-2.5 transition-all duration-300"
+              :disabled="stylizingLoading"
+              @click="newChat"
+            >
+              <div class="i-hugeicons:comment-add-01 text-20"></div>
+              <span>新对话</span>
+            </button>
+          </div>
+
+          <!-- Recent Chats Label -->
+          <div class="px-6 py-4 flex justify-between items-center">
+            <span class="text-[#7A7A7A] text-[13px] font-semibold tracking-wide">最近对话</span>
+            <div
+              class="i-hugeicons:settings-04 text-18 text-[#7A7A7A] cursor-pointer hover:text-gray-600"
+              @click="openModal"
+            ></div>
+          </div>
+
+          <!-- History List -->
           <div
-            flex="1 ~ col"
-            class="scrollable-table-container"
             ref="historyScrollRef"
+            class="flex-1 overflow-y-auto custom-scrollbar px-4"
             @scroll.passive="handleHistoryScroll"
           >
-            <n-data-table
-              ref="tableRef"
-              class="custom-table"
-              :style="{
-                'font-size': `20px`,
-                'fontcolor': `red`,
-                '--n-td-color': `#ffffff`,
-                'font-family': `-apple-system, BlinkMacSystemFont,'Segoe UI', Roboto, 'Helvetica Neue', Arial,sans-serif`,
-              }"
-              size="small"
-              :bordered="false"
-              :bottom-bordered="false"
-              :single-line="false"
-              :columns="[
-                {
-                  key: 'key',
-                  align: 'left',
-                  ellipsis: { tooltip: false },
-                },
-              ]"
-              :data="tableData"
-              :loading="isLoadingHistory"
-              :row-props="rowProps"
-            />
-          </div>
-          <div
-            class="footer"
-            style="flex-shrink: 0"
-          >
-            <n-divider
-              style="width: calc(100% - 60px); margin-left: 25px; margin-right: 35px;
-
---n-color: #e8eaf2;"
-            />
-            <n-button
-              quaternary
-              icon-placement="left"
-              type="primary"
-              strong
-              :style="{
-                'width': `200px`,
-                'height': `38px`,
-                'margin-left': `20px`,
-                'margin-bottom': `10px`,
-                'align-self': `center`,
-                'text-align': `center`,
-                'font-family': `-apple-system, BlinkMacSystemFont,
-            'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-            sans-serif`,
-                'font-size': `14px`,
-              }"
-              @click="openModal"
+            <div
+              v-if="isLoadingHistory && !tableData.length"
+              class="p-4 text-center text-gray-400 text-xs"
             >
-              <template #icon>
-                <n-icon>
-                  <div class="i-hugeicons:voice-id"></div>
-                </n-icon>
-              </template>
-              管理对话
-            </n-button>
+              加载中...
+            </div>
 
-            <TableModal
-              :show="isModalOpen"
-              @update:show="handleModalClose"
-            />
+            <div
+              v-for="(item, index) in tableData"
+              :key="item.uuid"
+              class="history-item px-2 py-3.5 mb-1 rounded-lg cursor-pointer flex items-center justify-between group transition-all duration-200"
+              :class="currentIndex === item.uuid ? 'bg-white text-[#333] shadow-sm font-medium' : 'text-[#4A4A4A] hover:bg-white/60'"
+              @click="handleHistoryClick(item)"
+            >
+              <div class="flex items-center gap-2 overflow-hidden w-full">
+                <div class="truncate text-[14px] w-full leading-relaxed">
+                  {{ item.key || '无标题对话' }}
+                </div>
+              </div>
+              <!-- Attachment Icon Placeholder -->
+              <div
+                v-if="index % 4 === 0"
+                class="i-hugeicons:attachment-01 text-14 text-[#9ca3af] shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+              ></div>
+            </div>
+
+            <div
+              v-if="isLoadingMoreHistory"
+              class="py-2 text-center text-gray-400 text-xs"
+            >
+              加载更多...
+            </div>
+          </div>
+
+          <!-- Sidebar Footer -->
+          <div class="sidebar-footer px-6 py-5 flex items-center justify-between bg-[#F6F6F8] mt-auto">
+            <n-popover
+              trigger="hover"
+              placement="top-start"
+              :show-arrow="false"
+              raw
+              :style="{ padding: 0 }"
+            >
+              <template #trigger>
+                <div class="user-info flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80">
+                  <!-- Avatar Icon -->
+                  <div class="i-hugeicons:user-circle text-28 text-[#7E6BF2]"></div>
+                </div>
+              </template>
+              <div class="w-[300px] bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+                <!-- User Header -->
+                <div class="flex items-center gap-3 mb-6 bg-gray-50/50 p-2 rounded-lg">
+                  <div class="i-hugeicons:user-circle text-40 text-[#7E6BF2]"></div>
+                  <div class="flex flex-col">
+                    <span class="text-[#333] font-bold text-16">Admin</span>
+                    <span class="text-[#999] text-12">UID: y9no5hmtvo</span>
+                  </div>
+                </div>
+
+                <!-- Action Grid -->
+                <div class="grid grid-cols-3 gap-y-6 gap-x-2 mb-6">
+                  <div
+                    class="flex flex-col items-center gap-2 cursor-pointer group"
+                    @click="handleDataSourceManager"
+                  >
+                    <div class="relative">
+                      <div class="i-hugeicons:database-01 text-20 text-[#666] group-hover:text-[#333] transition-colors"></div>
+                      <div class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></div>
+                    </div>
+                    <span class="text-12 text-[#666] group-hover:text-[#333]">数据源管理</span>
+                  </div>
+                </div>
+
+                <!-- Logout -->
+                <div
+                  class="flex flex-col items-start gap-2 cursor-pointer group mt-4 pt-4 border-t border-gray-100 pl-4"
+                  @click="handleLogout"
+                >
+                  <div class="i-hugeicons:logout-01 text-20 text-red-500 group-hover:text-red-600 transition-colors"></div>
+                  <span class="text-12 text-red-500 group-hover:text-red-600">退出登录</span>
+                </div>
+              </div>
+            </n-popover>
+
+            <div
+              class="my-space flex items-center gap-2 text-[#6A6A6A] hover:text-[#7E6BF2] cursor-pointer text-[14px] font-normal transition-colors"
+            >
+              <div class="i-hugeicons:folder-01 text-18"></div>
+              <span>我的空间</span>
+            </div>
           </div>
         </div>
       </n-layout-sider>
-      <n-layout-content class="content">
+
+      <n-layout-content class="content h-full bg-[#f6f7fb]">
         <!-- 内容区域 -->
         <div
           flex="~ 1 col"
           min-w-0
           h-full
         >
-          <div flex="~ justify-between items-center">
-            <NavigationNavBar :background-color="backgroundColorVariable" />
+          <!-- Top Header -->
+          <div
+            v-if="!showDefaultPage || collapsed"
+            class="top-header"
+          >
+            <div class="flex items-center gap-5">
+              <!-- Collapsed State Icons -->
+              <div
+                v-if="collapsed"
+                class="flex items-center gap-5"
+              >
+                <div
+                  class="i-hugeicons:sidebar-right-01 text-20 text-[#4A4A4A] cursor-pointer hover:text-[#111]"
+                  @click="collapsed = false"
+                ></div>
+                <div
+                  class="i-hugeicons:comment-add-01 text-20 text-[#4A4A4A] cursor-pointer hover:text-[#111]"
+                  @click="newChat"
+                ></div>
+              </div>
+
+              <div class="model-info flex items-center gap-1.5 cursor-pointer">
+                <span class="text-[16px] font-medium text-[#111]">Qwen3-Max</span>
+                <div class="i-hugeicons:arrow-down-01 text-16 text-[#111] stroke-[1.5]"></div>
+              </div>
+            </div>
+            <!--
+            <div class="badges">
+              <div class="badge">test</div>
+            </div>
+            -->
           </div>
 
           <!-- 这里循环渲染即可实现多轮对话 -->
@@ -1047,8 +1091,11 @@ const pendingUploadFileInfoList = ref([])
           >
             <!-- 默认对话页面 -->
             <transition name="fade">
-              <div v-if="showDefaultPage">
-                <DefaultPage />
+              <div
+                v-if="showDefaultPage"
+                class="h-full"
+              >
+                <DefaultPage @submit="handleSubmitFromDefaultPage" />
               </div>
             </transition>
 
@@ -1181,276 +1228,275 @@ const pendingUploadFileInfoList = ref([])
             <div class="i-mingcute:arrow-down-fill"></div>
           </div>
 
+          <!-- Bottom Input Area (C Style) -->
           <div
-            :class="['items-center', 'shrink-0', `bg-${backgroundColorVariable}`]"
+            v-if="!showDefaultPage"
+            class="bottom-input-container"
           >
-            <div
-              relative
-              class="flex-1 w-full p-1em"
-            >
-              <n-space
-                vertical
-                class="mx-10%"
-              >
+            <div class="input-card">
+              <!-- Pill for current mode -->
+              <div class="input-wrapper">
                 <div
-                  flex="~ gap-10"
-                  class="h-40"
+                  v-if="currentQaOption"
+                  class="mode-pill"
+                  :style="{ color: currentQaOption.color, backgroundColor: `${currentQaOption.color}15` }"
                 >
-                  <n-button
-                    type="default"
-                    :class="[
-                      qa_type === 'COMMON_QA' && 'active-tab',
-                      'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
-                    ]"
-                    @click="onAqtiveChange('COMMON_QA', '')"
-                  >
-                    <template #icon>
-                      <n-icon size="16">
-                        <svg
-                          t="1742194713465"
-                          class="icon"
-                          viewBox="0 0 1024 1024"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          p-id="8188"
-                          width="60"
-                          height="60"
-                        >
-                          <path
-                            d="M80.867881 469.76534l0.916659 0.916659 79.711097-79.711097L160.655367 389.901467a162.210364 162.210364 0 0 1 229.164631-229.164631l236.345122 236.345122L706.028994 317.332667l-236.345123-236.803452a275.112139 275.112139 0 0 0-388.81599 389.27432z m472.690245-388.81599l-0.916658 0.916659 79.711097 79.711097 0.916659-0.916658A162.210364 162.210364 0 0 1 862.663019 389.901467l-236.345122 236.345122 79.711097 79.711098 236.803452-236.345123a275.112139 275.112139 0 0 0-389.27432-388.81599z m-84.027031 861.506236l0.916659-0.916659-79.711098-79.711097-0.916658 0.916658a162.210364 162.210364 0 0 1-229.164631-229.431989l236.345122-236.345123L317.251198 317.332667l-236.803452 236.345122a275.112139 275.112139 0 0 0 389.27432 388.815991z m99.801197-372.736272a81.811773 81.811773 0 0 0 21.197728-78.794439 80.895115 80.895115 0 0 0-57.59671-57.596711 81.620803 81.620803 0 1 0 36.398982 136.352956z m373.156407-15.659583l-0.916659-0.916659-79.711097 79.711097 0.916658 0.916659a162.248559 162.248559 0 0 1-229.431989 229.431989L396.885907 626.704918 317.251198 706.568792l236.345122 236.803452A275.073945 275.073945 0 0 0 942.374117 554.136119z"
-                            fill="#297CE9"
-                            p-id="8189"
-                          />
-                        </svg>
-                      </n-icon>
-                    </template>
-                    智能问答
-                  </n-button>
-                  <n-button
-                    type="default"
-                    :class="[
-                      qa_type === 'DATABASE_QA' && 'active-tab',
-                      'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
-                    ]"
-                    @click="onAqtiveChange('DATABASE_QA', '')"
-                  >
-                    <template #icon>
-                      <n-icon size="19">
-                        <svg
-                          t="1754035667476"
-                          class="icon"
-                          viewBox="0 0 1024 1024"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          p-id="50983"
-                          width="60"
-                          height="60"
-                        ><path
-                          d="M512 102.6c110.7 0 215 12.3 293.9 34.7 35.8 10.2 65 22.1 84.5 34.7 18.6 12 21.3 19.7 21.6 20.6-0.2 0.9-3 8.6-21.6 20.6-19.5 12.5-48.7 24.5-84.5 34.7-78.9 22.3-183.2 34.7-293.9 34.7s-215-12.3-293.9-34.7c-35.8-10.2-65-22.1-84.5-34.7-18.6-12-21.3-19.7-21.6-20.6 0.2-0.9 3-8.6 21.6-20.6 19.5-12.5 48.7-24.5 84.5-34.7 78.9-22.4 183.2-34.7 293.9-34.7m0-40c-243 0-440 58.2-440 130s197 130 440 130 440-58.2 440-130-197-130-440-130zM112 190.4H72v641h40v-641z m840-0.3h-40v641h40v-641zM912 831v0.5c-0.2 0.9-3 8.6-21.6 20.6-19.5 12.5-48.7 24.5-84.5 34.7-78.9 22.3-183.2 34.6-293.9 34.6s-215-12.3-293.9-34.7c-35.8-10.2-65-22.1-84.5-34.7-18.6-12-21.3-19.7-21.6-20.6v-0.3l-40 0.3v0.1c0 71.8 197 130 440 130s440-58.2 440-130v-0.4l-40-0.1z m0-210.5v0.5c-0.2 0.9-3 8.6-21.6 20.6-19.5 12.5-48.7 24.5-84.5 34.7C727 698.6 622.7 711 512 711s-215-12.3-293.9-34.7c-35.8-10.2-65-22.1-84.5-34.7-18.6-12-21.3-19.7-21.6-20.6v-0.3l-40 0.3v0.1c0 71.8 197 130 440 130s440-58.2 440-130v-0.4l-40-0.2z m0-221.5v0.5c-0.2 0.9-3 8.6-21.6 20.6-19.5 12.5-48.7 24.5-84.5 34.7-78.9 22.3-183.2 34.7-293.9 34.7s-215-12.3-293.9-34.7c-35.8-10.2-65-22.1-84.5-34.7-18.6-12-21.3-19.7-21.6-20.6v-0.3l-40 0.3v0.1c0 71.8 197 130 440 130s440-58.2 440-130v-0.4l-40-0.2z"
-                          fill=""
-                          p-id="50984"
-                        /></svg>
-                      </n-icon>
-                    </template>
-                    数据问答
-                  </n-button>
-                  <n-button
-                    type="default"
-                    :class="[
-                      qa_type === 'FILEDATA_QA' && 'active-tab',
-                      'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
-                    ]"
-                    @click="onAqtiveChange('FILEDATA_QA', '')"
-                  >
-                    <template #icon>
-                      <n-icon size="20">
-                        <svg
-                          t="1732505460059"
-                          class="icon"
-                          viewBox="0 0 1024 1024"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          p-id="25828"
-                          width="64"
-                          height="64"
-                        >
-                          <path
-                            d="M858.4 943.9H137.2c-12.7 0-23-10.3-23-23V129c0-12.7 10.3-23 23-23s23 10.3 23 23v768.9h698.2c12.7 0 23 10.3 23 23s-10.3 23-23 23z"
-                            fill=""
-                            p-id="25829"
-                          />
-                          <path
-                            d="M137 66l37 63h-74zM921 921l-63 37v-74zM287 381h66c17.1 0 31 13.9 31 31v354c0 17.1-13.9 31-31 31h-66c-17.1 0-31-13.9-31-31V412c0-17.1 13.9-31 31-31zM491 193h66c17.1 0 31 13.9 31 31v542c0 17.1-13.9 31-31 31h-66c-17.1 0-31-13.9-31-31V224c0-17.1 13.9-31 31-31zM695 469h66c17.1 0 31 13.9 31 31v266c0 17.1-13.9 31-31 31h-66c-17.1 0-31-13.9-31-31V500c0-17.1 13.9-31 31-31z"
-                            fill=""
-                            p-id="25830"
-                          />
-                        </svg>
-                      </n-icon>
-                    </template>
-                    表格问答
-                  </n-button>
-                  <n-button
-                    type="default"
-                    :class="[
-                      qa_type === 'REPORT_QA' && 'active-tab',
-                      'rounded-100 w-120 h-36 p-15 text-13 c-#585a73',
-                    ]"
-                    @click="onAqtiveChange('REPORT_QA', '')"
-                  >
-                    <template #icon>
-                      <n-icon size="18">
-                        <svg
-                          t="1732528323504"
-                          class="icon"
-                          viewBox="0 0 1024 1024"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          p-id="41739"
-                          width="64"
-                          height="64"
-                        >
-                          <path
-                            d="M96 896c-8 0-15.5-3.1-21.2-8.8C69.1 881.6 66 874 66 866V445c0-5.5 4.5-10 10-10s10 4.5 10 10v421c0 2.7 1 5.2 2.9 7.1 1.9 1.9 4.4 2.9 7.1 2.9h612c5.5 0 10 4.5 10 10s-4.5 10-10 10H96z m748 0v-20c2.7 0 5.2-1 7.1-2.9 1.9-1.9 2.9-4.4 2.9-7.1v-80c0-5.5 4.5-10 10-10s10 4.5 10 10v80c0 8-3.1 15.5-8.8 21.2-5.6 5.7-13.2 8.8-21.2 8.8z m20-450c-5.5 0-10-4.5-10-10V126c0-5.5-4.5-10-10-10H96c-5.5 0-10 4.5-10 10v193c0 5.5-4.5 10-10 10s-10-4.5-10-10V126c0-16.5 13.4-30 30-30h748c16.5 0 30 13.4 30 30v310c0 5.5-4.5 10-10 10z"
-                            fill="#222222"
-                            p-id="41740"
-                          />
-                          <path
-                            d="M781 886m-16 0a16 16 0 1 0 32 0 16 16 0 1 0-32 0Z"
-                            fill="#222222"
-                            p-id="41741"
-                          />
-                          <path
-                            d="M76 383m-16 0a16 16 0 1 0 32 0 16 16 0 1 0-32 0Z"
-                            fill="#222222"
-                            p-id="41742"
-                          />
-                          <path
-                            d="M84 226h775v20H84zM750 826c-57.2 0-110.9-22.3-151.3-62.7C558.3 722.9 536 669.2 536 612s22.3-110.9 62.7-151.3C639.1 420.3 692.8 398 750 398s110.9 22.3 151.3 62.7C941.7 501.1 964 554.8 964 612s-22.3 110.9-62.7 151.3C860.9 803.7 807.2 826 750 826z m0-408c-107 0-194 87-194 194s87 194 194 194 194-87 194-194-87-194-194-194z"
-                            fill="#222222"
-                            p-id="41743"
-                          />
-                          <path
-                            d="M901.7 753.2c-1 0-2.1-0.2-3.1-0.5-4.1-1.3-6.9-5.2-6.9-9.5V478.8c0-4.3 2.8-8.2 6.9-9.5 4.1-1.3 8.6 0.1 11.2 3.6 24.9 34 51.4 75.6 51.4 139.1 0 62-22.3 97.3-51.4 137.1-1.9 2.7-4.9 4.1-8.1 4.1z m10.1-241.9v200c17.9-28 29.5-56.4 29.5-99.3-0.1-40.2-11-70.5-29.5-100.7z"
-                            fill="#222222"
-                            p-id="41744"
-                          />
-                          <path
-                            d="M859 788l93 130"
-                            fill="#358AFE"
-                            p-id="41745"
-                          />
-                          <path
-                            d="M952 928c-3.1 0-6.2-1.5-8.1-4.2l-93-130c-3.2-4.5-2.2-10.7 2.3-14 4.5-3.2 10.7-2.2 14 2.3l93 130c3.2 4.5 2.2 10.7-2.3 14-1.8 1.3-3.9 1.9-5.9 1.9zM482.4 468.4H171.6c-8.8 0-16-7.2-16-16v-89.8c0-8.8 7.2-16 16-16h310.8c8.8 0 16 7.2 16 16v89.8c0 8.8-7.2 16-16 16z m-306.8-20h302.8v-81.8H175.6v81.8z m306.8-81.8zM384 580H165c-5.5 0-10-4.5-10-10s4.5-10 10-10h219c5.5 0 10 4.5 10 10s-4.5 10-10 10zM455 690H165c-5.5 0-10-4.5-10-10s4.5-10 10-10h290c5.5 0 10 4.5 10 10s-4.5 10-10 10zM525 800H165c-5.5 0-10-4.5-10-10s4.5-10 10-10h360c5.5 0 10 4.5 10 10s-4.5 10-10 10zM183 146c15.5 0 28 12.5 28 28s-12.5 28-28 28-28-12.5-28-28 12.5-28 28-28z m94 0c15.5 0 28 12.5 28 28s-12.5 28-28 28-28-12.5-28-28 12.5-28 28-28z m94 0c15.5 0 28 12.5 28 28s-12.5 28-28 28-28-12.5-28-28 12.5-28 28-28z"
-                            fill="#222222"
-                            p-id="41746"
-                          />
-                        </svg>
-                      </n-icon>
-                    </template>
-                    深度搜索
-                  </n-button>
+                  <div
+                    :class="currentQaOption.icon"
+                    class="pill-icon"
+                  ></div>
+                  <span>{{ currentQaOption.label }}</span>
+                  <!-- <div class="i-hugeicons:cancel-01 close-icon" @click="clearMode"></div> -->
                 </div>
-                <div
-                  :class="[
-                    'relative b b-solid b-primary bg-white',
-                    'rounded-10px p-12',
-                  ]"
+
+                <FileUploadManager
+                  ref="fileUploadRef"
+                  v-model="pendingUploadFileInfoList"
+                />
+
+                <n-input
+                  ref="refInputTextString"
+                  v-model:value="inputTextString"
+                  type="textarea"
+                  placeholder="帮你完成复杂任务，并生成研究报告"
+                  :autosize="{ minRows: 1, maxRows: 6 }"
+                  class="custom-chat-input"
+                  @keydown.enter.prevent="handleCreateStylized()"
                 >
-                  <FileUploadManager
-                    ref="fileUploadRef"
-                    v-model="pendingUploadFileInfoList"
-                  />
+                  <template #prefix>
+                    <!-- Hide default upload dropdown if we want to change UI,
+                                  but for now keeping it as it provides file functionality.
+                                  Maybe we can restyle it? -->
+                    <!-- Keeping original upload dropdown for function -->
+                    <n-dropdown :options="fileUploadRef?.options || []">
+                      <div class="action-icon i-hugeicons:attachment-01"></div>
+                    </n-dropdown>
+                  </template>
+                </n-input>
+              </div>
 
-                  <n-input
-                    ref="refInputTextString"
-                    v-model:value="inputTextString"
-                    type="textarea"
-                    class="textarea-resize-none w-full text-15 [&_.n-input\_\_border]:hidden [&_.n-input\_\_state-border]:hidden [&_.n-input-wrapper]:p-0!"
-                    :style="{
-                      '--n-border-radius': '15px',
-                      'align': 'center',
-                      'font-family': `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'`,
-                      'font-size': '16px',
-                      'line-height': '1.5',
-                    }"
-                    :placeholder="placeholder"
-                    :autosize="{
-                      minRows: 1,
-                      maxRows: 10,
-                    }"
-                  >
-                    <template
-                      #prefix
-                    >
-                      <n-dropdown
-                        :options="fileUploadRef?.options || []"
-                      >
-                        <div
-                          flex="~ items-center justify-center"
-                          class="rounded-50% p-7 hover:bg-primary/5 transition-all-300 bg-primary/1"
-                          b="~ solid primary/20"
-                        >
-                          <div class="text-20  i-uil:upload cursor-pointer"></div>
-                        </div>
-                        <!-- <n-icon size="30">
-                          <svg
-                            t="1729566080604"
-                            class="icon"
-                            viewBox="0 0 1024 1024"
-                            version="1.1"
-                            xmlns="http://www.w3.org/2000/svg"
-                            p-id="38910"
-                            width="64"
-                            height="64"
-                          >
-                            <path
-                              d="M856.448 606.72v191.744a31.552 31.552 0 0 1-31.488 31.488H194.624a31.552 31.552 0 0 1-31.488-31.488V606.72a31.488 31.488 0 1 1 62.976 0v160.256h567.36V606.72a31.488 31.488 0 1 1 62.976 0zM359.872 381.248c-8.192 0-10.56-5.184-5.376-11.392L500.48 193.152a11.776 11.776 0 0 1 18.752 0l145.856 176.704c5.184 6.272 2.752 11.392-5.376 11.392H359.872z"
-                              fill="#838384"
-                              p-id="38911"
-                            />
-                            <path
-                              d="M540.288 637.248a30.464 30.464 0 1 1-61.056 0V342.656a30.464 30.464 0 1 1 61.056 0v294.592z"
-                              fill="#838384"
-                              p-id="38912"
-                            />
-                          </svg>
-                        </n-icon> -->
-                      </n-dropdown>
-                    </template>
-                  </n-input>
+              <div class="action-row">
+                <!-- Left Action (Expand) -->
+                <div class="i-hugeicons:expand-01 action-icon"></div>
 
-                  <n-float-button
-                    position="absolute"
-                    :type="stylizingLoading ? 'primary' : 'default'"
-                    color
-                    bottom="10px"
-                    right="8px"
-                    :class="[
-                      stylizingLoading && 'opacity-90',
-                      'text-20',
-                    ]"
-                    @click.stop="handleCreateStylized()"
-                  >
-                    <div
-                      v-if="stylizingLoading"
-                      class="i-svg-spinners:pulse-2 c-#fff text-20"
-                    ></div>
-                    <div
-                      v-else
-                      class="flex items-center justify-center i-mingcute:send-fill text-20 cursor-pointer transition-colors duration-300 hover:c-primary/80"
-                    ></div>
-                  </n-float-button>
+                <!-- Right Action (Send/Stop) -->
+                <div class="send-btn-wrapper">
+                  <div
+                    v-if="stylizingLoading"
+                    class="i-svg-spinners:pulse-2 c-#26244c text-20"
+                  ></div>
+                  <div
+                    v-else
+                    class="i-hugeicons:stop-circle send-icon"
+                    @click="handleCreateStylized()"
+                  ></div>
                 </div>
-              </n-space>
+              </div>
+            </div>
+            <div class="footer-note">
+              内容由AI生成，仅供参考
             </div>
           </div>
         </div>
       </n-layout-content>
     </n-layout>
+    <TableModal
+      v-model:show="isModalOpen"
+      @update:show="handleModalClose"
+    />
   </div>
 </template>
 
 <style lang="scss" scoped>
+/* Sidebar Styles */
+
+.qianwen-sidebar {
+  background-color: #f9f9f9;
+  border-right: 1px solid #f0f0f0;
+}
+
+.new-chat-btn {
+  transition: all 0.2s ease;
+}
+
+.new-chat-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgb(99 102 241 / 20%);
+}
+
+.history-item {
+  transition: all 0.2s;
+}
+
+/* Custom Scrollbar for History List */
+
+.custom-scrollbar {
+  overflow-y: auto;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
+/* Top Header Styles */
+
+.top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background-color: #fff;
+
+  /* border-bottom: 1px solid #f0f0f0; */
+
+  /* Image shows no obvious border, or very subtle. Removing for cleaner look matching image */
+}
+
+.model-info {
+  display: flex;
+  align-items: center;
+
+  /* gap: 8px; */
+
+  color: #333;
+
+  /* font-weight: 600; */
+}
+
+.model-icon {
+  color: #8b5cf6;
+  font-size: 16px;
+}
+
+.badge {
+  background-color: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+/* Bottom Input Area Styles (C Style) */
+
+.bottom-input-container {
+  padding: 20px 40px;
+  background-color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.input-card {
+  width: 100%;
+  max-width: 900px;
+  background-color: #fff;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 8%);
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.mode-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.pill-icon {
+  font-size: 14px;
+}
+
+.custom-chat-input {
+  --n-border: none !important;
+  --n-border-hover: none !important;
+  --n-border-focus: none !important;
+  --n-box-shadow: none !important;
+  --n-box-shadow-focus: none !important;
+
+  background-color: transparent !important;
+  font-size: 15px;
+  padding: 0;
+  flex: 1;
+
+  :deep(.n-input__textarea-el) {
+    padding: 0;
+    min-height: 40px;
+    line-height: 1.6;
+  }
+
+  :deep(.n-input__placeholder) {
+    color: #9ca3af;
+  }
+}
+
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.action-icon {
+  font-size: 20px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #374151;
+  }
+}
+
+.send-btn-wrapper {
+  cursor: pointer;
+}
+
+.send-icon {
+  font-size: 28px;
+  color: #26244c; /* Dark Navy */
+}
+
+.footer-note {
+  font-size: 12px;
+  color: #d1d5db;
+  margin-top: 8px;
+  text-align: center;
+}
+
+
+/* Existing Styles */
+
 .create-chat-box {
   width: 168px;
   overflow: hidden;

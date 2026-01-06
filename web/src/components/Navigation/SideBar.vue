@@ -113,48 +113,6 @@ const sidebarItems = ref([
       fill: true,
     },
   },
-  {
-    label: '对话',
-    key: 'ChatIndex',
-    onClick() {
-      router.push({
-        name: this.key,
-      })
-    },
-    renderIcon() {
-      return (
-        <div class="i-my-svg:chat-index"></div>
-      )
-    },
-  },
-  {
-    label: '效率',
-    key: 'TestAssitant',
-    onClick() {
-      router.push({
-        name: this.key,
-      })
-    },
-    renderIcon() {
-      return (
-        <div class="i-my-svg:chat-efficiency"></div>
-      )
-    },
-  },
-  {
-    label: '智能体',
-    key: 'McpChat',
-    onClick() {
-      router.push({
-        name: this.key,
-      })
-    },
-    renderIcon() {
-      return (
-        <div class="i-my-svg:chat-agent"></div>
-      )
-    },
-  },
 ])
 
 

@@ -54,7 +54,7 @@ bp = Blueprint("datasource", url_prefix="/datasource")
 @bp.get("/list")
 @openapi.summary("获取数据源列表")
 @openapi.description("获取当前用户的数据源列表")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.response(
     200,
     {
@@ -127,7 +127,7 @@ async def get_datasource_list(req: request.Request):
 @bp.post("/add")
 @openapi.summary("创建数据源")
 @openapi.description("创建新的数据源")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -177,7 +177,7 @@ async def create_datasource(req: request.Request, body: CreateDatasourceRequest)
 @bp.post("/update")
 @openapi.summary("更新数据源")
 @openapi.description("更新数据源信息")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -229,7 +229,7 @@ async def update_datasource(req: request.Request, body: UpdateDatasourceRequest)
 @bp.post("/syncTables/<ds_id:int>")
 @openapi.summary("同步数据源表和字段")
 @openapi.description("将前端选择的表列表写入并同步字段，未包含的表/字段将被清理")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",
@@ -282,7 +282,7 @@ async def sync_tables(req: request.Request, ds_id: int, body: SyncTablesRequest)
 @bp.post("/delete/<ds_id:int>")
 @openapi.summary("删除数据源")
 @openapi.description("删除指定的数据源")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",
@@ -321,7 +321,7 @@ async def delete_datasource(req: request.Request, ds_id: int):
 @bp.post("/get/<ds_id:int>")
 @openapi.summary("获取数据源详情")
 @openapi.description("根据ID获取数据源详情")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",
@@ -400,7 +400,7 @@ async def get_datasource(req: request.Request, ds_id: int):
 @bp.post("/check")
 @openapi.summary("测试数据源连接")
 @openapi.description("测试数据源连接是否正常")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -460,7 +460,7 @@ async def check_datasource(req: request.Request, body: CheckDatasourceRequest):
 @bp.post("/getTablesByConf")
 @openapi.summary("根据配置获取表列表")
 @openapi.description("根据数据源配置获取表列表")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -503,7 +503,7 @@ async def get_tables_by_conf(req: request.Request, body: GetTablesByConfRequest)
 @bp.post("/getFieldsByConf")
 @openapi.summary("根据配置获取表字段列表")
 @openapi.description("提供数据源类型、配置、表名，直接返回字段列表")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -545,7 +545,7 @@ async def get_fields_by_conf(req: request.Request, body: GetFieldsByConfRequest)
 @bp.post("/tableList/<ds_id:int>")
 @openapi.summary("获取数据源表列表")
 @openapi.description("获取指定数据源的所有表")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",
@@ -593,7 +593,7 @@ async def get_table_list(req: request.Request, ds_id: int):
 @bp.post("/fieldList/<table_id:int>")
 @openapi.summary("获取表字段列表")
 @openapi.description("获取指定表的所有字段")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="table_id",
     location="path",
@@ -644,7 +644,7 @@ async def get_field_list(req: request.Request, table_id: int):
 @bp.post("/saveTable")
 @openapi.summary("保存表信息")
 @openapi.description("保存表的自定义注释等信息")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -693,7 +693,7 @@ async def save_table(req: request.Request, body: SaveTableRequest):
 @bp.post("/saveField")
 @openapi.summary("保存字段信息")
 @openapi.description("保存字段的自定义注释和状态等信息")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -742,7 +742,7 @@ async def save_field(req: request.Request, body: SaveFieldRequest):
 @bp.post("/previewData")
 @openapi.summary("预览表数据")
 @openapi.description("预览指定表的数据（最多100条）")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -789,7 +789,7 @@ async def preview_data(req: request.Request, body: PreviewDataRequest):
 @bp.post("/tableRelation")
 @openapi.summary("保存表关系")
 @openapi.description("保存数据源的表关系数据")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.body(
     {
         "application/json": {
@@ -835,7 +835,7 @@ async def save_table_relation(req: request.Request, body: TableRelationRequest):
 @bp.post("/getTableRelation/<ds_id:int>")
 @openapi.summary("获取表关系")
 @openapi.description("获取数据源的表关系数据")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",
@@ -868,7 +868,7 @@ async def get_table_relation(req: request.Request, ds_id: int):
 @bp.post("/getNeo4jRelation/<ds_id:int>")
 @openapi.summary("获取 Neo4j 图数据库关系")
 @openapi.description("从 Neo4j 图数据库获取数据源的表关系数据")
-@openapi.tag("数据源管理")
+@openapi.tag("数据服务")
 @openapi.parameter(
     name="ds_id",
     location="path",

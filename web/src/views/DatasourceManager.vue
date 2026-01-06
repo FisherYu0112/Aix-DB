@@ -117,6 +117,11 @@ const handleViewTables = (item: any) => {
   router.push(`/datasource/table/${item.id}/${encodeURIComponent(item.name)}`)
 }
 
+// 返回对话页面
+const handleBack = () => {
+  router.push({ name: 'ChatIndex' })
+}
+
 // 获取图标 (这里假设只有 mysql 图标，实际应根据 type 返回不同图标)
 const getIcon = (type: string) => {
   // 可以根据 type 返回不同的图片路径
@@ -133,6 +138,12 @@ onMounted(() => {
   <div class="datasource-manager">
     <div class="header">
       <div class="title-section">
+        <div
+          class="back-btn"
+          @click="handleBack"
+        >
+          <div class="i-hugeicons:arrow-left-01 text-24"></div>
+        </div>
         <h2>数据源管理</h2>
         <!-- <p class="subtitle">
           管理您的数据库连接，支持 MySQL, PostgreSQL, Oracle 等多种数据源
@@ -302,9 +313,29 @@ onMounted(() => {
     margin-bottom: 32px;
 
     .title-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .back-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: #4b5563;
+
+        &:hover {
+          background-color: #f3f4f6;
+          color: #111827;
+        }
+      }
 
       h2 {
-        margin: 0 0 8px;
+        margin: 0;
         font-size: 24px;
         font-weight: 600;
         color: #1f2937;

@@ -35,7 +35,7 @@ setTimeout(() => {
             '--n-opacity-spinning': '0',
           }"
         >
-          <section
+          <!-- <section
             flex="~ col"
             min-w-0
             w-70
@@ -44,7 +44,7 @@ setTimeout(() => {
             relative
           >
             <NavigationSideBar />
-          </section>
+          </section> -->
           <section
             flex="1 ~"
             min-w-0

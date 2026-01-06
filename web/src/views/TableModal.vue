@@ -1,4 +1,5 @@
 <script setup>
+import { h } from 'vue'
 import * as GlobalAPI from '@/api'
 
 const props = defineProps({
@@ -17,10 +18,34 @@ const columns = ref([
     title: '用户问题',
     key: 'question',
     ellipsis: true,
+    render(row) {
+      const questionText = row.question || row.key || '无标题'
+      return h('div', { class: 'flex items-center gap-2' }, [
+        h('div', { class: 'i-hugeicons:comment-01 text-20 text-indigo-500' }),
+        h('span', {
+          style: {
+            fontSize: '15px',
+            fontWeight: '500',
+            color: 'red', // gray-700
+            lineHeight: '1.4',
+            wordBreak: 'break-word',
+          },
+        }, questionText),
+      ])
+    },
   },
   {
     title: '创建时间',
     key: 'create_time',
+    width: 200, // Increased width
+    render(row) {
+      // Fallback for create_time if it's missing or named differently
+      const timeText = row.create_time || '刚刚'
+      return h('div', { class: 'flex items-center gap-2 text-gray-500' }, [
+        h('div', { class: 'i-hugeicons:time-01 text-16' }), // Increased icon size
+        h('span', { class: 'text-14' }, timeText), // Increased text size
+      ])
+    },
   },
 ])
 const loading = ref(false)
@@ -129,88 +154,137 @@ const tableRef = useTemplateRef('tableRef')
     :on-after-leave="close"
     preset="card"
     :title="modalTitle"
-    class="w-900 h-600 flex flex-col"
+    class="custom-modal w-[900px] h-[650px] flex flex-col rounded-2xl overflow-hidden shadow-xl"
+    :header-style="{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6' }"
+    :content-style="{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }"
+    :bordered="false"
   >
-    <div
-      class="modal-content"
-      style="flex: 1; display: flex; flex-direction: column"
-    >
-      <n-spin :show="loading" style="flex: 1; overflow: auto">
-        <n-data-table
-          ref="tableRef"
-          :data="tableData"
-          :columns="columns"
-          :row-key="rowKey"
-          :checked-row-keys="checkedRowKeys"
-          style="height: 100%; width: 100%"
-          :style="{
-            'font-size': `15px`,
-            '--n-td-color': `#ffffff`,
-            'font-family': `-apple-system, BlinkMacSystemFont,'Segoe UI', Roboto, 'Helvetica Neue', Arial,sans-serif`,
-          }"
-          @update:checked-row-keys="handleCheck"
-        >
-          <template #bodyCell="{ column, row }">
-            <td :key="column.key">{{ row[column.key] }}</td>
-          </template>
-        </n-data-table>
+    <!-- Modal Header Customization -->
+    <!-- Removed manual header-extra as n-modal usually provides a close button by default with preset='card'.
+         If duplication occurs, we should let the preset handle it or hide the preset one.
+         Since user said 'two icons', we likely added one manually while the preset added another.
+         We'll remove our manual one here. -->
+
+    <div class="modal-content flex-1 flex flex-col min-h-0 bg-[#f9f9fb]">
+      <n-spin :show="loading" class="flex-1 overflow-hidden flex flex-col">
+        <div class="p-4 flex-1 overflow-auto">
+             <n-data-table
+              ref="tableRef"
+              :data="tableData"
+              :columns="columns"
+              :row-key="rowKey"
+              :checked-row-keys="checkedRowKeys"
+              :single-line="false"
+              class="custom-table"
+              :row-class-name="() => 'custom-row'"
+              @update:checked-row-keys="handleCheck"
+            />
+        </div>
       </n-spin>
-      <div
-        class="footer"
-        style="
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 10px;
-background-color: var(--n-modal-footer-bg);
-border-top: 1px solid var(--n-modal-border-color);
-          "
-      >
+
+      <div class="footer px-6 py-4 bg-white border-t border-gray-100 flex justify-between items-center">
         <n-pagination
           v-model:page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :page-count="pagination.pageCount"
           :page-size="pagination.pageSize"
+          :display-order="['pages', 'quick-jumper']"
+          size="medium"
           @update:page="handlePageChange"
           @update:page-size="handlePageSizeChange"
-        />
-        <div>
-          <n-button style="margin-right: 10px" @click="close">
-            取消
-          </n-button>
-          <n-button
-            type="error"
+        >
+          <template #prev>
+            <div class="flex items-center gap-1 text-gray-500">
+              <div class="i-hugeicons:arrow-left-01 text-14"></div>
+            </div>
+          </template>
+          <template #next>
+            <div class="flex items-center gap-1 text-gray-500">
+              <div class="i-hugeicons:arrow-right-01 text-14"></div>
+            </div>
+          </template>
+        </n-pagination>
+
+        <div class="flex items-center gap-3">
+          <button
+            class="px-6 py-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium text-15 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
             :disabled="checkedRowKeys.length === 0"
             @click="deleteSelectedData"
           >
-            删除所选
-          </n-button>
+            <div class="i-hugeicons:delete-02 text-18"></div>
+            <span>删除所选</span>
+          </button>
         </div>
       </div>
     </div>
   </n-modal>
 </template>
 
-<style scoped>
-.modal-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+<style scoped lang="scss">
+/* Modal Customization */
+
+:deep(.n-modal-body-wrapper) {
+  padding: 0 !important;
 }
 
-.footer {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 10px;
-  background-color: var(--n-modal-footer-bg);
-  border-top: 1px solid var(--n-modal-border-color);
-  justify-content: flex-end;
+/* Table Customization */
+
+:deep(.n-data-table) {
+  --n-th-font-weight: 600 !important;
+  --n-th-text-color: #666 !important;
+
+  background-color: transparent !important;
 }
 
-/* 确保分页组件在新的一行 */
+:deep(.n-data-table .n-data-table-th) {
+  background-color: transparent !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  font-size: 13px;
+  padding: 12px 16px;
+  color: #666; /* Ensure header text is visible */
+}
 
-.n-pagination {
-  margin-top: 10px;
+:deep(.n-data-table .n-data-table-td) {
+    background-color: #fff !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+    padding: 16px;
+    color: #333 !important;
+    font-size: 14px;
+}
+
+:deep(.n-data-table .n-data-table-tr:hover .n-data-table-td) {
+  background-color: #fff !important;
+}
+
+/* Row Hover Effect */
+
+:deep(.custom-row) {
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #f9fafb !important;
+
+    td {
+      background-color: #f9fafb !important;
+    }
+  }
+}
+
+/* Pagination Customization */
+
+:deep(.n-pagination .n-pagination-item) {
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  &.n-pagination-item--active {
+    background-color: #f3f4f6;
+    color: #333;
+    border-color: #e5e7eb;
+  }
+
+  &:hover:not(.n-pagination-item--active) {
+    background-color: #f9fafb;
+    color: #6366f1;
+  }
 }
 </style>

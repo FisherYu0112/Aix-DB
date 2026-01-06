@@ -1,173 +1,386 @@
 <script lang="ts" setup>
-const hotSearchItems = [
-  '① Text2SQL 文本转SQL 数据库查询',
-  '② Echart图表增强且数据问答可视化',
-  '③ Text2SQL与Echarts提供数据分析',
-  '④ 结合Echarts和Text2SQL提升解读',
-  '⑤ 基于大数据底座提升数据问答速度',
+import { ref } from 'vue'
+
+const emit = defineEmits(['submit'])
+
+const inputValue = ref('')
+const selectedMode = ref<{ label: string, value: string, icon: string, color: string } | null>(null)
+
+const handleEnter = (e?: KeyboardEvent) => {
+  if (e && e.shiftKey) {
+    return
+  }
+  if (!inputValue.value.trim()) {
+    return
+  }
+
+  emit('submit', {
+    text: inputValue.value,
+    mode: selectedMode.value?.value || 'COMMON_QA', // Default to Smart QA if nothing selected
+  })
+  inputValue.value = ''
+}
+
+const chips = [
+  { icon: 'i-hugeicons:ai-chat-02', label: '智能问答', value: 'COMMON_QA', color: '#3b82f6' },
+  { icon: 'i-hugeicons:database-01', label: '数据问答', value: 'DATABASE_QA', color: '#10b981' },
+  { icon: 'i-hugeicons:table-01', label: '表格问答', value: 'FILEDATA_QA', color: '#f59e0b' },
+  { icon: 'i-hugeicons:search-02', label: '深度搜索', value: 'REPORT_QA', color: '#8b5cf6' },
 ]
-const headerTwoItems = [
-  '① RAG模型优化问答系统流程',
-  '② 向量技术提高数据检索效率',
-  '③ 整合公网数据提升回答质量',
-  '④ RAG框架实现精准通用问答',
-  '⑤ 扩展方便对接三方开源系统',
-]
-const headerThreeItems = [
-  '① 大模型解析文件实现智能问答',
-  '② 统计学方法深入分析表格数据',
-  '③ 表格数据结合大模型精准解读',
-  '④ 支持更复杂表格计算增强统计',
-  '⑤ 表格问答数据图表可视化展示',
-]
+
+const handleChipClick = (chip: typeof chips[0]) => {
+  selectedMode.value = chip
+}
+
+const clearMode = () => {
+  selectedMode.value = null
+}
 </script>
 
 <template>
-  <div class="container">
-    <div class="header">
-      <div class="bg-primary rounded-50%">
-        <div class="size-60 bg-white i-my-svg:system-logo"></div>
+  <div class="default-page-container">
+    <div class="content-wrapper">
+      <!-- Title -->
+      <div class="header-section">
+        <h1 class="page-title">
+          Aix · 智能助手
+        </h1>
       </div>
-      <div class="header-text">
-        <h1 class="header-title">你的全能AI数据助手</h1>
-        <p class="header-subtitle">基于大模型的数据问答小助手</p>
-      </div>
-    </div>
-    <div class="content">
-      <div class="card-one">
-        <h4 class="title">通用问答</h4>
-        <p class="card-subtitle">基于RAG大模型的通用问答</p>
-        <ul>
-          <li
-            v-for="(item, index) in headerTwoItems"
-            :key="index"
-            class="list-item"
+
+      <!-- Search Box -->
+      <div class="search-box">
+        <!-- Input Area Wrapper to handle pill -->
+        <div class="input-wrapper">
+          <!-- Selected Mode Pill -->
+          <div
+            v-if="selectedMode"
+            class="mode-pill"
+            :style="{ color: selectedMode.color, backgroundColor: `${selectedMode.color}15` }"
           >
-            {{ item }}
-          </li>
-        </ul>
-      </div>
-      <div class="card-two">
-        <h4 class="title">数据问答</h4>
-        <p class="card-subtitle">基于大模型的数据问答</p>
-        <ul>
-          <li
-            v-for="(item, index) in hotSearchItems"
-            :key="index"
-            class="list-item"
+            <div
+              :class="selectedMode.icon"
+              class="pill-icon"
+            ></div>
+            <span>{{ selectedMode.label }}</span>
+            <div
+              class="i-hugeicons:cancel-01 close-icon"
+              @click.stop="clearMode"
+            ></div>
+          </div>
+
+          <!-- Input Area -->
+          <n-input
+            v-model:value="inputValue"
+            type="textarea"
+            placeholder="帮你完成复杂任务，并生成研究报告"
+            :autosize="{ minRows: 1, maxRows: 6 }"
+            class="custom-input"
+            @keydown.enter.prevent="handleEnter"
+          />
+        </div>
+
+        <!-- Chips and Actions Row -->
+        <div class="bottom-row">
+          <!-- Show chips only if no mode is selected (optional, or keep them to allow switching)
+                 Based on Image 1, the chip is inside. The user said "Click specific function style becomes B style".
+                 So maybe we hide the bottom chips if one is selected? Or keep them?
+                 Let's keep them for easy switching, but visually maybe dim them?
+                 Actually, usually these UIs hide the suggestions once you start typing or select one.
+                 But for now let's just keep them below for accessibility.
+            -->
+          <div
+            v-if="!selectedMode"
+            class="chips-container"
           >
-            {{ item }}
-          </li>
-        </ul>
-      </div>
-      <div class="card-three">
-        <h4 class="title">表格问答</h4>
-        <p class="card-subtitle">基于大模型的表格问答</p>
-        <ul>
-          <li
-            v-for="(item, index) in headerThreeItems"
-            :key="index"
-            class="list-item"
+            <div
+              v-for="chip in chips"
+              :key="chip.label"
+              class="chip"
+              @click="handleChipClick(chip)"
+            >
+              <div
+                :class="chip.icon"
+                class="chip-icon"
+                :style="{ color: chip.color }"
+              ></div>
+              {{ chip.label }}
+            </div>
+          </div>
+          <div
+            v-else
+            class="chips-container"
           >
-            {{ item }}
-          </li>
-        </ul>
+            <!-- Placeholder to keep layout stable or show nothing -->
+          </div>
+
+          <div class="actions-container">
+            <!-- Send Button -->
+            <div
+              class="send-button"
+              @click="handleEnter"
+            >
+              <div class="i-hugeicons:arrow-up-01 send-icon"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Icons -->
+      <div class="features-row">
+        <div
+          v-for="item in bottomIcons"
+          :key="item.label"
+          class="feature-item"
+        >
+          <div
+            class="feature-icon-wrapper"
+            :style="{ color: item.color }"
+          >
+            <div
+              :class="item.icon"
+              class="feature-icon"
+            ></div>
+          </div>
+          <span class="feature-label">{{ item.label }}</span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
-body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.container {
+<style scoped lang="scss">
+.default-page-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 20px;
+  background-color: #fff;
 }
 
-.header {
-  background-color: #fff;
+.content-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 800px;
+  padding: 0 20px;
+}
 
-  /* background: linear-gradient(to right, #f1f0fe, #f3f2ff); */
+.header-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 40px;
+}
 
-  border-radius: 5px;
-  text-align: center;
+.logo-wrapper {
+  margin-bottom: 16px;
+
+  /* Add styling for the moon/astronaut graphic if we had one, for now use an icon */
+
+  background: linear-gradient(135deg, #f0f4ff 0%, #e6eaff 100%);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 6%;
   justify-content: center;
-  padding: 15px;
 }
 
-.header-text {
+.page-title {
+  font-size: 32px;
+  font-weight: 600;
+  color: #26244c;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.search-box {
+  width: 100%;
+  background-color: #fff;
+  border-radius: 24px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 5%);
+  border: 1px solid #e5e7eb;
+  padding: 20px;
+  position: relative;
+  transition: all 0.3s ease;
+
+  &:hover {
+    box-shadow: 0 8px 30px rgb(0 0 0 / 8%);
+  }
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+  min-height: 40px;
+}
+
+.mode-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+  margin-top: 4px; /* Align with input text */
+}
+
+.pill-icon {
+  font-size: 14px;
+}
+
+.close-icon {
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.custom-input {
+  --n-border: none !important;
+  --n-border-hover: none !important;
+  --n-border-focus: none !important;
+  --n-box-shadow: none !important;
+  --n-box-shadow-focus: none !important;
+
+  background-color: transparent !important;
+  font-size: 16px;
+  padding: 0;
   flex: 1;
-  text-align: left;
-  flex-grow: 1;
+
+  :deep(.n-input__textarea-el) {
+    padding: 0;
+    min-height: 40px;
+    line-height: 1.6;
+  }
+
+  :deep(.n-input__placeholder) {
+    color: #9ca3af;
+  }
 }
 
-.header-title {
-  margin: 0; /* Remove default margin */
-  font-size: 1.5em; /* Adjust as needed */
+.bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  min-height: 36px;
 }
 
-.header-subtitle {
-  margin: 0; /* Remove default margin */
-  font-size: 1em; /* Adjust as needed */
-  margin-top: 3px; /* Add a small top margin for spacing between title and subtitle */
+.chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.header > div {
-  text-align: left;
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #f8fafc;
+  border-radius: 100px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+
+  &:hover {
+    background-color: #fff;
+    border-color: #e2e8f0;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 5%);
+  }
 }
 
-.content {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-top: 10px;
+.chip-icon {
+  font-size: 16px;
 }
 
-.card-one {
-  border-radius: 10px;
-  padding: 20px;
-  background: linear-gradient(to bottom, #f0effe, #d4eefc);
+.actions-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
-.card-two {
-  border-radius: 10px;
-  padding: 20px;
-  background: linear-gradient(to right, #f0effe, #d4eefc);
+.send-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #c4b5fd; /* Light Purple/Lavender as in Image 1 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #fff;
+
+  &:hover {
+    background-color: #a78bfa;
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 }
 
-.card-three {
-  border-radius: 10px;
-  padding: 20px;
-  background: linear-gradient(to left, #f0effe, #d4eefc);
+.send-icon {
+  font-size: 20px;
 }
 
-.card-subtitle {
-  margin: 0; /* Remove default margin */
-  font-size: 13px; /* Adjust as needed */
-  color: #6c757d; /* Optional: to match the color of .header-subtitle */
+.features-row {
+  display: flex;
+  gap: 40px;
+  margin-top: 80px;
+  justify-content: center;
 }
 
-.title {
-  color: #113;
-  font-size: 17px;
-  margin-bottom: 5px;
+.feature-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
 }
 
-.list-item {
-  list-style-type: none;
-  margin-bottom: 20px;
-  margin-top: 10px;
+.feature-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background-color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+
+  .feature-item:hover & {
+    background-color: #f3f4f6;
+  }
+}
+
+.feature-icon {
+  font-size: 24px;
+}
+
+.feature-label {
+  font-size: 12px;
+  color: #6b7280;
 }
 </style>

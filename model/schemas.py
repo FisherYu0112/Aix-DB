@@ -342,6 +342,8 @@ class DifyGetAnswerRequest(BaseModel):
 
     query: str = Field(description="查询内容")
     chat_id: str = Field(description="聊天ID")
+    uuid: str = Field(description="uuid")
+    qa_type: str = Field(description="问答类型")
 
 
 class DifyGetSuggestedRequest(BaseModel):
