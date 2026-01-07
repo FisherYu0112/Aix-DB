@@ -14,7 +14,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from agent.deepagent.tools import search_web
 from common.llm_util import get_llm
 from common.minio_util import MinioUtils
-from constants.code_enum import DataTypeEnum, DiFyAppEnum
+from constants.code_enum import DataTypeEnum, IntentEnum
 from services.user_service import add_user_record, decode_jwt_token
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
@@ -259,7 +259,7 @@ class DeepAgent:
                 query,
                 t02_answer_data,
                 {},
-                DiFyAppEnum.REPORT_QA.value[0],
+                IntentEnum.REPORT_QA.value[0],
                 user_token,
                 file_list,
             )

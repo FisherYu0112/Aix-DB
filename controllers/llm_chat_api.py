@@ -9,7 +9,7 @@ from common.res_decorator import async_json_resp
 from common.token_decorator import check_token
 from constants.code_enum import SysCodeEnum
 from common.param_parser import parse_params
-from services.dify_service import DiFyRequest, query_dify_suggested, stop_dify_chat
+from services.llm_service import query_dify_suggested, stop_dify_chat, LLMRequest
 from model.schemas import (
     DifyGetAnswerRequest,
     DifyGetSuggestedRequest,
@@ -21,7 +21,7 @@ from model.schemas import (
 
 bp = Blueprint("fiFyApi", url_prefix="/dify")
 
-dify = DiFyRequest()
+llm = LLMRequest()
 
 
 @bp.post("/get_answer")
@@ -59,7 +59,7 @@ async def get_answer(req: Request, body: DifyGetAnswerRequest):
         req_dict = body.model_dump()
 
         async def stream_fn(response):
-            await dify.exec_query(response, req_obj=req_dict, token=token)
+            await llm.exec_query(response, req_obj=req_dict, token=token)
 
         response = ResponseStream(stream_fn, content_type="text/event-stream")
         return response

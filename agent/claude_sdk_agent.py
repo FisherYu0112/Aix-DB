@@ -9,7 +9,7 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 from claude_agent_sdk.types import SystemMessage, AssistantMessage, ResultMessage
 
 from common.minio_util import MinioUtils
-from constants.code_enum import DataTypeEnum, DiFyAppEnum
+from constants.code_enum import DataTypeEnum, IntentEnum
 from services.user_service import add_user_record, decode_jwt_token
 
 logger = logging.getLogger(__name__)
@@ -140,7 +140,7 @@ class ClaudeSDKAgent:
                     query_text,
                     t02_answer_data,
                     {},
-                    DiFyAppEnum.COMMON_QA.value[0],
+                    IntentEnum.COMMON_QA.value[0],
                     user_token,
                     file_list,
                 )

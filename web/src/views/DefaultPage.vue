@@ -81,10 +81,11 @@ const bottomIcons = [
     <div class="content-wrapper">
       <!-- Title -->
       <div class="header-section">
-        <h1 class="page-title">
-          <span class="gradient-text">Aix</span> · 智能助手
-        </h1>
-        <!-- Removed subtitle -->
+        <div class="logo-wrapper">
+          <h1 class="page-title">
+            <span class="gradient-text">Aix</span>
+          </h1>
+        </div>
       </div>
 
       <!-- Search Box -->
@@ -197,41 +198,34 @@ const bottomIcons = [
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 800px;
+  max-width: 900px;
   padding: 0 20px;
+  position: relative;
+  top: -40px; /* Visual optical adjustment to move slightly up */
 }
 
 .header-section {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 24px; /* Reduced from 40px */
+  margin-bottom: 20px;
+  width: 100%;
 }
 
 .page-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: #1e293b;
-  letter-spacing: -0.5px;
+  font-size: 70px;
+  font-weight: 900; /* Extra Bold/Black */
+  line-height: 1;
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  letter-spacing: -6px; /* Tight tracking for modern logo feel */
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #7E6BF2 0%, #a78bfa 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%); /* Electric Indigo -> Violet -> Pink */
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-weight: 800;
-}
-
-.subtitle {
-  margin-top: 12px;
-  font-size: 16px;
-  color: #64748b;
-  font-weight: 400;
-  letter-spacing: 1px;
+  filter: drop-shadow(0 0 40px rgb(124 58 237 / 15%)); /* Soft glow */
 }
 
 /* Input Card Styles matching chat.vue */

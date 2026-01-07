@@ -13,6 +13,10 @@ from services.user_service import (
     get_user_info,
     delete_user_record,
     send_dify_feedback,
+    query_user_list,
+    add_user,
+    update_user,
+    delete_user,
 )
 from model.schemas import (
     LoginRequest,
@@ -23,6 +27,11 @@ from model.schemas import (
     DeleteUserRecordResponse,
     DifyFeedbackRequest,
     DifyFeedbackResponse,
+    QueryUserListRequest,
+    UserListResponse,
+    AddUserRequest,
+    UpdateUserRequest,
+    DeleteUserRequest,
     get_schema,
 )
 
@@ -187,3 +196,95 @@ async def fead_back(request: Request, body: DifyFeedbackRequest):
     chat_id = body.chat_id
     rating = body.rating
     return await send_dify_feedback(chat_id, rating)
+
+
+@bp.post("/list")
+@openapi.summary("查询用户列表")
+@openapi.description("分页查询用户列表，支持按用户名搜索")
+@openapi.tag("用户管理")
+@openapi.body(
+    {"application/json": {"schema": get_schema(QueryUserListRequest)}},
+    description="查询参数",
+    required=True,
+)
+@openapi.response(200, {"application/json": {"schema": get_schema(UserListResponse)}}, description="查询成功")
+@check_token
+@async_json_resp
+@parse_params
+async def user_list(request: Request, body: QueryUserListRequest):
+    """
+    查询用户列表
+    :param request:
+    :param body:
+    :return:
+    """
+    return await query_user_list(body.page, body.size, body.name)
+
+
+@bp.post("/add")
+@openapi.summary("添加用户")
+@openapi.description("添加新用户")
+@openapi.tag("用户管理")
+@openapi.body(
+    {"application/json": {"schema": get_schema(AddUserRequest)}},
+    description="用户参数",
+    required=True,
+)
+@openapi.response(200, description="添加成功")
+@check_token
+@async_json_resp
+@parse_params
+async def user_add(request: Request, body: AddUserRequest):
+    """
+    添加用户
+    :param request:
+    :param body:
+    :return:
+    """
+    return await add_user(body.userName, body.password, body.mobile)
+
+
+@bp.post("/update")
+@openapi.summary("更新用户")
+@openapi.description("更新用户信息")
+@openapi.tag("用户管理")
+@openapi.body(
+    {"application/json": {"schema": get_schema(UpdateUserRequest)}},
+    description="用户参数",
+    required=True,
+)
+@openapi.response(200, description="更新成功")
+@check_token
+@async_json_resp
+@parse_params
+async def user_update(request: Request, body: UpdateUserRequest):
+    """
+    更新用户
+    :param request:
+    :param body:
+    :return:
+    """
+    return await update_user(body.id, body.userName, body.mobile, body.password)
+
+
+@bp.post("/delete")
+@openapi.summary("删除用户")
+@openapi.description("删除用户")
+@openapi.tag("用户管理")
+@openapi.body(
+    {"application/json": {"schema": get_schema(DeleteUserRequest)}},
+    description="删除参数",
+    required=True,
+)
+@openapi.response(200, description="删除成功")
+@check_token
+@async_json_resp
+@parse_params
+async def user_delete(request: Request, body: DeleteUserRequest):
+    """
+    删除用户
+    :param request:
+    :param body:
+    :return:
+    """
+    return await delete_user(body.id)

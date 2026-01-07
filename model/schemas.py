@@ -336,6 +336,53 @@ class DifyFeedbackResponse(BaseResponse):
     data: Dict[str, str] = Field(description="反馈结果")
 
 
+# ==================== 用户管理相关模型 ====================
+class UserBase(BaseModel):
+    """用户基本信息"""
+
+    userName: str = Field(description="用户名")
+    mobile: Optional[str] = Field(None, description="手机号")
+
+
+class AddUserRequest(UserBase):
+    """添加用户请求"""
+
+    password: str = Field(description="密码")
+
+
+class UpdateUserRequest(UserBase):
+    """更新用户请求"""
+
+    id: int = Field(description="用户ID")
+    password: Optional[str] = Field(None, description="密码(留空则不修改)")
+
+
+class UserResponse(UserBase):
+    """用户响应"""
+
+    id: int = Field(description="用户ID")
+    createTime: Optional[str] = Field(None, description="创建时间")
+    updateTime: Optional[str] = Field(None, description="修改时间")
+
+
+class UserListResponse(BaseResponse):
+    """用户列表响应"""
+
+    data: PaginatedResponse[UserResponse] = Field(description="用户列表")
+
+
+class QueryUserListRequest(PaginationParams):
+    """查询用户列表请求"""
+
+    name: Optional[str] = Field(None, description="用户名搜索")
+
+
+class DeleteUserRequest(BaseModel):
+    """删除用户请求"""
+
+    id: int = Field(description="用户ID")
+
+
 # ==================== Dify 服务相关模型 ====================
 class DifyGetAnswerRequest(BaseModel):
     """获取Dify答案请求"""

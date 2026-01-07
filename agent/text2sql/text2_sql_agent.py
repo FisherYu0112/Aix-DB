@@ -8,7 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agent.text2sql.analysis.graph import create_graph
 from agent.text2sql.state.agent_state import AgentState
-from constants.code_enum import DataTypeEnum, DiFyAppEnum
+from constants.code_enum import DataTypeEnum, IntentEnum
 from services.user_service import add_user_record, decode_jwt_token
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
@@ -114,7 +114,7 @@ class Text2SqlAgent:
                     query,
                     t02_answer_data,
                     t04_answer_data,
-                    DiFyAppEnum.DATABASE_QA.value[0],
+                    IntentEnum.DATABASE_QA.value[0],
                     user_token,
                     {},
                 )

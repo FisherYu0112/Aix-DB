@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from functools import wraps
 
 import jwt
 from sanic import response
@@ -10,6 +11,7 @@ def check_token(f):
     jwt token 校验注解
     """
 
+    @wraps(f)
     async def wrapper(request, *args, **kwargs):
         token = request.headers.get("Authorization")
         if not token:

@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from common.exception import MyException
-from constants.code_enum import SysCodeEnum, DiFyAppEnum, DataTypeEnum
+from constants.code_enum import SysCodeEnum, IntentEnum, DataTypeEnum
 from constants.dify_rest_api import DiFyRestApi
 from model.db_connection_pool import get_db_pool
 from model.db_models import TUserQaRecord, TUser
@@ -183,7 +183,7 @@ async def add_question_record(
 
         # 文件问答时保存 minio/key
         file_key = ""
-        if qa_type == DiFyAppEnum.FILEDATA_QA.value[0]:
+        if qa_type == IntentEnum.FILEDATA_QA.value[0]:
             file_key = question.split("|")[0]
             question = question.split("|")[1]
 
@@ -416,3 +416,106 @@ async def send_dify_feedback(chat_id, rating):
     else:
         logger.error(f"Failed to send feedback. Status code: {response.status_code},Response body: {response.text}")
         raise
+
+
+async def query_user_list(page, size, name=None):
+    """
+    查询用户列表
+    :param page: 页码
+    :param size: 每页大小
+    :param name: 用户名搜索
+    :return:
+    """
+    with pool.get_session() as session:
+        query = session.query(TUser)
+        if name:
+            query = query.filter(TUser.userName.like(f"%{name}%"))
+
+        total_count = query.count()
+        total_pages = (total_count + size - 1) // size
+
+        users = query.order_by(TUser.createTime.desc()).offset((page - 1) * size).limit(size).all()
+
+        user_list = []
+        for user in users:
+            u_dict = model_to_dict(user)
+            if u_dict.get("createTime"):
+                u_dict["createTime"] = u_dict["createTime"].strftime("%Y-%m-%d %H:%M:%S")
+            if u_dict.get("updateTime"):
+                u_dict["updateTime"] = u_dict["updateTime"].strftime("%Y-%m-%d %H:%M:%S")
+            user_list.append(u_dict)
+
+        return PaginatedResponse(
+            records=user_list,
+            current_page=page,
+            total_count=total_count,
+            total_pages=total_pages,
+        )
+
+
+async def add_user(username, password, mobile):
+    """
+    添加用户
+    :param username: 用户名
+    :param password: 密码
+    :param mobile: 手机号
+    :return:
+    """
+    with pool.get_session() as session:
+        exist = session.query(TUser).filter(TUser.userName == username).first()
+        if exist:
+            raise MyException(SysCodeEnum.PARAM_ERROR, "用户名已存在")
+
+        new_user = TUser(
+            userName=username,
+            password=password,
+            mobile=mobile,
+            createTime=datetime.now(),
+            updateTime=datetime.now(),
+        )
+        session.add(new_user)
+        session.commit()
+        return True
+
+
+async def update_user(user_id, username, mobile, password=None):
+    """
+    更新用户
+    :param user_id: 用户ID
+    :param username: 用户名
+    :param mobile: 手机号
+    :param password: 密码（可选）
+    :return:
+    """
+    with pool.get_session() as session:
+        user = session.query(TUser).filter(TUser.id == user_id).first()
+        if not user:
+            raise MyException(SysCodeEnum.PARAM_ERROR, "用户不存在")
+
+        if user.userName != username:
+            exist = session.query(TUser).filter(TUser.userName == username).first()
+            if exist:
+                raise MyException(SysCodeEnum.PARAM_ERROR, "用户名已存在")
+
+        user.userName = username
+        user.mobile = mobile
+        if password:
+            user.password = password
+        user.updateTime = datetime.now()
+        session.commit()
+        return True
+
+
+async def delete_user(user_id):
+    """
+    删除用户
+    :param user_id: 用户ID
+    :return:
+    """
+    with pool.get_session() as session:
+        user = session.query(TUser).filter(TUser.id == user_id).first()
+        if not user:
+            raise MyException(SysCodeEnum.PARAM_ERROR, "用户不存在")
+        session.delete(user)
+        session.commit()
+        return True

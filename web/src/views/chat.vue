@@ -984,7 +984,7 @@ const handleLLMConfig = () => {
               v-for="(item, index) in tableData"
               :key="item.uuid"
               class="history-item px-2 py-3.5 mb-1 rounded-lg cursor-pointer flex items-center justify-between group transition-all duration-200"
-              :class="currentIndex === item.uuid ? 'bg-white text-[#333] shadow-sm font-medium' : 'text-[#4A4A4A] hover:bg-white/60'"
+              :class="currentIndex === item.uuid ? 'bg-[#F2F0FF] text-[#7E6BF2] font-medium' : 'text-[#555] hover:bg-[#EAEBED] hover:text-[#333]'"
               @click="handleHistoryClick(item)"
             >
               <div class="flex items-center gap-2 overflow-hidden w-full">

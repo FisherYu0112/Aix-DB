@@ -13,7 +13,7 @@ from agent.excel.excel_agent import ExcelAgent
 from agent.text2sql.text2_sql_agent import Text2SqlAgent
 from common.exception import MyException
 from constants.code_enum import (
-    DiFyAppEnum,
+    IntentEnum,
     DataTypeEnum,
     DiFyCodeEnum,
     SysCodeEnum,
@@ -41,9 +41,9 @@ excel_agent = ExcelAgent()
 deep_agent = DeepAgent()
 
 
-class DiFyRequest:
+class LLMRequest:
     """
-    DiFy操作服务类
+    llm_request 操作服务类
     """
 
     def __init__(self):
@@ -62,7 +62,7 @@ class DiFyRequest:
                 body_str = req_body_content.decode("utf-8")
 
                 req_obj = json.loads(body_str)
-            
+
             logging.info(f"query param: {json.dumps(req_obj, ensure_ascii=False)}")
 
             # str(uuid.uuid4())
@@ -87,18 +87,16 @@ class DiFyRequest:
                     token = token.split(" ")[1]
 
             # 调用智能体
-            if qa_type == DiFyAppEnum.COMMON_QA.value[0]:
+            if qa_type == IntentEnum.COMMON_QA.value[0]:
                 await common_agent.run_agent(query, res, chat_id, uuid_str, token, file_list)
                 return None
-            elif qa_type == DiFyAppEnum.DATABASE_QA.value[0]:
+            elif qa_type == IntentEnum.DATABASE_QA.value[0]:
                 await sql_agent.run_agent(query, res, chat_id, uuid_str, token)
                 return None
-            elif qa_type == DiFyAppEnum.FILEDATA_QA.value[0]:
-                # cleaned_query = file_list[0]["source_file_key"] + "|" + query
+            elif qa_type == IntentEnum.FILEDATA_QA.value[0]:
                 await excel_agent.run_excel_agent(cleaned_query, res, chat_id, uuid_str, token, file_list)
                 return None
-            elif qa_type == DiFyAppEnum.REPORT_QA.value[0]:
-                # cleaned_query = file_list[0]["source_file_key"] + "|" + query
+            elif qa_type == IntentEnum.REPORT_QA.value[0]:
                 await deep_agent.run_agent(cleaned_query, res, chat_id, uuid_str, token, file_list)
                 return None
 
@@ -123,7 +121,7 @@ class DiFyRequest:
                     json=body_params,
                     timeout=aiohttp.ClientTimeout(total=60 * 10),  # 等待10分钟超时
                 ) as response:
-                    logging.info(f"dify response status: {response.status}")
+                    logging.info(f"llm response status: {response.status}")
                     if response.status == 200:
                         # await self.res_begin(res, chat_id)
                         data_type = ""
@@ -426,7 +424,7 @@ class DiFyRequest:
 
         # 通用问答时，使用上次会话id 实现多轮对话效果
         conversation_id = ""
-        if qa_type == DiFyAppEnum.COMMON_QA.value[0]:
+        if qa_type == IntentEnum.COMMON_QA.value[0]:
             qa_record = query_user_qa_record(chat_id)
             if qa_record and len(qa_record) > 0:
                 conversation_id = qa_record[0]["conversation_id"]
@@ -456,7 +454,7 @@ class DiFyRequest:
         :return:
         """
         # 遍历枚举成员并检查第一个元素是否与测试字符串匹配
-        for member in DiFyAppEnum:
+        for member in IntentEnum:
             if member.value[0] == qa_type:
                 return os.getenv("DIFY_DATABASE_QA_API_KEY")
         else:
@@ -473,7 +471,7 @@ async def query_dify_suggested(chat_id) -> dict:
     # 查询对话记录
     qa_record = query_user_qa_record(chat_id)
     url = DiFyRestApi.replace_path_params(DiFyRestApi.DIFY_REST_SUGGESTED, {"message_id": qa_record[0]["message_id"]})
-    logger.info(f"query dify suggested url: {url}")
+    logger.info(f"query llm suggested url: {url}")
     api_key = os.getenv("DIFY_DATABASE_QA_API_KEY")
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
@@ -505,25 +503,25 @@ async def stop_dify_chat(request, task_id, qa_type) -> dict:
         token = token.split(" ")[1]
 
     # 通用问答和数据问答停止任务
-    if qa_type == DiFyAppEnum.COMMON_QA.value[0]:
+    if qa_type == IntentEnum.COMMON_QA.value[0]:
         user_dict = await decode_jwt_token(token)
         task_id = user_dict["id"]
         success = await common_agent.cancel_task(task_id)
         return {"success": success, "message": "任务已停止" if success else "未找到任务"}
 
-    elif qa_type == DiFyAppEnum.DATABASE_QA.value[0]:
+    elif qa_type == IntentEnum.DATABASE_QA.value[0]:
         user_dict = await decode_jwt_token(token)
         task_id = user_dict["id"]
         success = await sql_agent.cancel_task(task_id)
         return {"success": success, "message": "任务已停止" if success else "未找到任务"}
 
-    elif qa_type == DiFyAppEnum.FILEDATA_QA.value[0]:
+    elif qa_type == IntentEnum.FILEDATA_QA.value[0]:
         user_dict = await decode_jwt_token(token)
         task_id = user_dict["id"]
         success = await excel_agent.cancel_task(task_id)
         return {"success": success, "message": "任务已停止" if success else "未找到任务"}
 
-    elif qa_type == DiFyAppEnum.REPORT_QA.value[0]:
+    elif qa_type == IntentEnum.REPORT_QA.value[0]:
         user_dict = await decode_jwt_token(token)
         task_id = user_dict["id"]
         success = await deep_agent.cancel_task(task_id)
@@ -535,7 +533,7 @@ async def stop_dify_chat(request, task_id, qa_type) -> dict:
 
         api_key = os.getenv("DIFY_DATABASE_QA_API_KEY")
         # 行业报告走的是 报告问答的key
-        if DiFyAppEnum.FILEDATA_QA.value[0] == qa_type:
+        if IntentEnum.FILEDATA_QA.value[0] == qa_type:
             api_key = os.getenv("DIFY_ENTERPRISE_REPORT_API_KEY")
 
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}

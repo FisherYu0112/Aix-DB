@@ -21,9 +21,9 @@ class SysCodeEnum(Enum):
     SYSTEM_ERROR = (500, "系统错误", "系统内部错误")
 
 
-class DiFyAppEnum(Enum):
+class IntentEnum(Enum):
     """
-    DiFy app-key 枚举
+    意图分类 枚举
     """
 
     DATABASE_QA = ("DATABASE_QA", "数据问答")
@@ -37,16 +37,16 @@ class DiFyAppEnum(Enum):
 
 def get_qatype_name(member_name):
     """
-    根据DiFyAppEnum枚举成员名称获取对应的中文名称
+    根据IntentEnum枚举成员名称获取对应的中文名称
 
     :param member_name: 枚举成员名称字符串，如 "REPORT_QA"
     :return: 对应的中文名称字符串
     """
     try:
-        enum_member = DiFyAppEnum[member_name]
+        enum_member = IntentEnum[member_name]
         return enum_member.value[1]
     except KeyError:
-        raise ValueError(f"'{member_name}' 不是有效的DiFyAppEnum枚举成员")
+        raise ValueError(f"'{member_name}' 不是有效的IntentEnum枚举成员")
 
 
 class DataTypeEnum(Enum):
