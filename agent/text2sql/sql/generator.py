@@ -1,104 +1,182 @@
+"""
+SQL 生成节点
+使用 SQLBot 模板系统生成 SQL 语句
+"""
+
 import json
-import traceback
-
-from langchain_core.prompts import ChatPromptTemplate
-from datetime import datetime
 import logging
+import traceback
+from datetime import datetime
+from typing import Dict, Any, Optional
 
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+
+from agent.text2sql.state.agent_state import AgentState
+from agent.text2sql.template.prompt_builder import PromptBuilder
+from agent.text2sql.template.schema_formatter import format_schema_to_m_schema, get_database_engine_info
 from common.llm_util import get_llm
+from model.db_connection_pool import get_db_pool
+from model.datasource_models import Datasource
+from services.datasource_service import DatasourceService
 
 logger = logging.getLogger(__name__)
 
 
-def sql_generate(state):
-
-    llm = get_llm(0)
-
-    prompt = ChatPromptTemplate.from_template(
-        """
-        你是一位专业的数据库管理员（DBA），任务是根据提供的数据库结构、表关系以及用户需求，生成优化的MYSQL SQL查询语句，并推荐合适的可视化图表。
-          
-        ## 任务
-          - 根据用户问题生成一条优化的SQL语句。
-          - 根据查询生成逻辑从**图表定义**中选择最合适的图表类型。
-          
-        ## 约束条件
-         1. 你必须仅生成一条合法、可执行的SQL查询语句 —— 不得包含解释、Markdown、注释或额外文本。
-         2. **你必须严格且完整地仅使用所提供的表结构和表关系中明确定义的表名与列名。禁止引入、假设、拼写错误或引用任何未在 {db_schema} 和 {table_relationship} 
-         中显式声明的表、字段、别名或虚拟列。即使常见命名（如 id、name、created_at）也仅在表结构中存在时才可使用。**
-         3. 你必须严格遵守数据类型、外键关系及表结构中定义的约束。
-         4. 使用适当的SQL子句（JOIN、WHERE、GROUP BY、HAVING、ORDER BY、LIMIT等）以确保准确性和性能。
-         5. 若问题涉及时序，请合理使用提供的“当前时间”上下文（例如用于相对日期计算）。
-         6. 不得假设表结构中未明确定义的列或表。
-         7. 如果用户问题模糊或者缺乏足够的信息以生成正确的查询，请返回：`NULL`
-         8. 当用户明确要求查看明细数据且未指定具体数量时，应适当限制返回结果数量（如LIMIT 50）以提高查询性能，但如果用户指定了具体数量则按照用户要求执行
-         9. 对于聚合查询或统计类查询，不应随意添加LIMIT子句
-        
-       ## 提供的信息
-        - 表结构：{db_schema}
-        - 表关系：{table_relationship}
-        - 用户提问：{user_query}
-        - 当前时间：{current_time}
-             
-        ## 图表定义
-        - generate_area_chart: used to display the trend of data under a continuous independent variable, allowing observation of overall data trends.
-        - generate_bar_chart: used to compare values across different categories, suitable for horizontal comparisons.
-        - generate_boxplot_chart: used to display the distribution of data, including the median, quartiles, and outliers.
-        - generate_column_chart: used to compare values across different categories, suitable for vertical comparisons.
-        - generate_district_map: Generate a district-map, used to show administrative divisions and data distribution.
-        - generate_dual_axes_chart: Generate a dual-axes chart, used to display the relationship between two variables with different units or ranges.
-        - generate_fishbone_diagram: Generate a fishbone diagram, also known as an Ishikawa diagram, used to identify and display the root causes of a problem.
-        - generate_flow_diagram: Generate a flowchart, used to display the steps and sequence of a process.
-        - generate_funnel_chart: Generate a funnel chart, used to display data loss at different stages.
-        - generate_histogram_chart: Generate a histogram, used to display the distribution of data by dividing it into intervals and counting the number of data points in each interval.
-        - generate_line_chart: Generate a line chart, used to display the trend of data over time or another continuous variable.
-        - generate_liquid_chart: Generate a liquid chart, used to display the proportion of data, visually representing percentages in the form of water-filled spheres.
-        - generate_mind_map: Generate a mind-map, used to display thought processes and hierarchical information.
-        - generate_network_graph: Generate a network graph, used to display relationships and connections between nodes.
-        - generate_organization_chart: Generate an organizational chart, used to display the structure of an organization and personnel relationships.
-        - generate_path_map: Generate a path-map, used to display route planning results for POIs.
-        - generate_pie_chart: Generate a pie chart, used to display the proportion of data, dividing it into parts represented by sectors showing the percentage of each part.
-        - generate_pin_map: Generate a pin-map, used to show the distribution of POIs.
-        - generate_radar_chart: Generate a radar chart, used to display multi-dimensional data comprehensively, showing multiple dimensions in a radar-like format.
-        - generate_sankey_chart: Generate a sankey chart, used to display data flow and volume, representing the movement of data between different nodes in a Sankey-style format.
-        - generate_scatter_chart: Generate a scatter plot, used to display the relationship between two variables, showing data points as scattered dots on a coordinate system.
-        - generate_treemap_chart: Generate a treemap, used to display hierarchical data, showing data in rectangular forms where the size of rectangles represents the value of the data.
-        - generate_venn_chart: Generate a venn diagram, used to display relationships between sets, including intersections, unions, and differences.
-        - generate_violin_chart: Generate a violin plot, used to display the distribution of data, combining features of boxplots and density plots to provide a more detailed view of the data distribution.
-        - generate_word_cloud_chart: Generate a word-cloud, used to display the frequency of words in textual data, with font sizes indicating the frequency of each word.
-        - generate_table: Generate a structured table, used to organize and present data in rows and columns, facilitating clear and concise information display for easy reading and analysis.
-        
-        ## 输出格式
-        - 你**必须且只能**输出一个符合以下结构的 **纯 JSON 对象**，不得包含任何额外文本、注释、换行或 Markdown 格式：
-        ```json
-        {{
-            "sql_query": "生成的SQL语句字符串",
-            "chart_type": "推荐的图表类型字符串，如 \"generate_area_chart\""
-        }}
+def sql_generate(state: AgentState) -> AgentState:
     """
-    )
-
-    chain = prompt | llm
-
+    使用 SQLBot 模板系统生成 SQL 语句
+    
+    Args:
+        state: Agent 状态对象
+        
+    Returns:
+        更新后的 state
+    """
     try:
-        response = chain.invoke(
-            {
-                "db_schema": state["db_info"],
-                "user_query": state["user_query"],
-                "table_relationship": state.get("table_relationship", []),
-                "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
+        # 获取数据库信息
+        db_info = state.get("db_info", {})
+        if not db_info:
+            logger.error("db_info 为空，无法生成 SQL")
+            state["generated_sql"] = "No SQL query generated"
+            return state
+        
+        # 获取数据源信息
+        datasource_id = state.get("datasource_id")
+        db_type = "mysql"  # 默认类型
+        db_name = "database"  # 默认数据库名
+        
+        if datasource_id:
+            try:
+                db_pool = get_db_pool()
+                with db_pool.get_session() as session:
+                    ds = DatasourceService.get_datasource_by_id(session, datasource_id)
+                    if ds:
+                        db_type = ds.type
+                        # 尝试从配置中获取数据库名
+                        try:
+                            from common.datasource_util import DatasourceConfigUtil
+                            config = DatasourceConfigUtil.decrypt_config(ds.configuration)
+                            db_name = config.get("database", config.get("dbSchema", "database"))
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning(f"获取数据源信息失败: {e}，使用默认值")
+        
+        # 格式化 schema 为 M-Schema 格式
+        schema_str = format_schema_to_m_schema(
+            db_info=db_info,
+            db_name=db_name,
+            db_type=db_type,
         )
-
-        # state["attempts"] += 1
-        clean_json_str = response.content.strip().removeprefix("```json").strip().removesuffix("```").strip()
-        state["generated_sql"] = json.loads(clean_json_str)["sql_query"]
-        # mcp-hub 服务默认添加前缀防止重复问题
-        state["chart_type"] = "mcp-server-chart-" + json.loads(clean_json_str)["chart_type"]
+        
+        # 获取数据库引擎信息
+        engine = get_database_engine_info(db_type)
+        
+        # 获取表关系信息（格式化）
+        table_relationship = state.get("table_relationship", [])
+        # 将表关系格式化为字符串（如果 SQLBot 模板需要的话）
+        # 当前模板中似乎不直接使用 table_relationship，但保留以备后用
+        
+        # 使用 PromptBuilder 构建提示词
+        prompt_builder = PromptBuilder()
+        
+        # RAG 增强检索：检索术语和训练示例
+        try:
+            from agent.text2sql.rag.terminology_retriever import retrieve_terminologies
+            import asyncio
+            
+            # 检索术语（同步调用）
+            terminologies = retrieve_terminologies(
+                question=state["user_query"],
+                datasource_id=datasource_id,
+                oid=1,  # 默认组织ID，后续可以从用户信息获取
+                top_k=10,
+            )
+            
+            # 检索训练示例
+            from agent.text2sql.rag.training_retriever import retrieve_training_examples
+            data_training = retrieve_training_examples(
+                question=state["user_query"],
+                datasource_id=datasource_id,
+                oid=1,  # 默认组织ID，后续可以从用户信息获取
+                top_k=5,
+            )
+        except Exception as e:
+            logger.warning(f"RAG 检索失败: {e}，使用空字符串")
+            terminologies = ""
+            data_training = ""
+        
+        custom_prompt = ""  # 自定义提示词（暂时为空）
+        error_msg = ""  # 错误消息（暂时为空）
+        
+        # 获取系统提示词和用户提示词
+        system_prompt, user_prompt = prompt_builder.build_sql_prompt(
+            db_type=db_type,
+            schema=schema_str,
+            question=state["user_query"],
+            engine=engine,
+            lang="简体中文",
+            terminologies=terminologies,
+            data_training=data_training,
+            custom_prompt=custom_prompt,
+            enable_query_limit=True,  # 启用查询限制
+            error_msg=error_msg,
+            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            change_title=False,  # 暂时不生成对话标题
+        )
+        
+        # 构建消息列表
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        
+        # 调用 LLM
+        llm = get_llm(0)
+        response = llm.invoke(messages)
+        
+        # 解析响应（JSON 格式）
+        response_content = response.content.strip()
+        
+        # 清理 JSON 字符串（移除可能的 markdown 代码块标记）
+        if "```json" in response_content:
+            response_content = response_content.split("```json")[1]
+        if "```" in response_content:
+            response_content = response_content.split("```")[0]
+        response_content = response_content.strip()
+        
+        # 解析 JSON
+        try:
+            result = json.loads(response_content)
+            
+            if result.get("success", True):
+                # 成功生成 SQL
+                state["generated_sql"] = result.get("sql", "")
+                chart_type = result.get("chart-type", "table")
+                state["chart_type"] = chart_type
+                
+                # 保存使用的表名（如果模板返回了 tables 字段）
+                if "tables" in result:
+                    # 可以保存到 state 中，以备后用
+                    pass
+            else:
+                # 生成失败
+                error_message = result.get("message", "无法生成 SQL")
+                logger.warning(f"SQL 生成失败: {error_message}")
+                state["generated_sql"] = "No SQL query generated"
+                state["chart_type"] = None
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"解析 LLM 响应 JSON 失败: {e}")
+            logger.error(f"响应内容: {response_content[:500]}")
+            state["generated_sql"] = "No SQL query generated"
+            state["chart_type"] = None
 
     except Exception as e:
         traceback.print_exception(e)
-        logger.error(f"Error in generating: {e}")
+        logger.error(f"SQL 生成过程中发生错误: {e}", exc_info=True)
         state["generated_sql"] = "No SQL query generated"
+        state["chart_type"] = None
 
     return state

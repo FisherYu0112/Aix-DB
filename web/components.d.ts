@@ -23,6 +23,7 @@ declare module 'vue' {
     LlmForm: typeof import('./src/components/llm/llm-form.vue')['default']
     LLMForm: typeof import('./src/components/LLM/LLMForm.vue')['default']
     MarkdownPreview: typeof import('./src/components/MarkdownPreview/index.vue')['default']
+    MarkdownPreviewMarkdownAntv: typeof import('./src/components/MarkdownPreview/markdown-antv.vue')['default']
     MarkdownPreviewMarkdownEcharts: typeof import('./src/components/MarkdownPreview/markdown-echarts.vue')['default']
     MarkdownPreviewMarkdownTable: typeof import('./src/components/MarkdownPreview/markdown-table.vue')['default']
     NavigationNavBar: typeof import('./src/components/Navigation/nav-bar.vue')['default']

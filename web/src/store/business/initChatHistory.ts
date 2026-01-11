@@ -104,10 +104,12 @@ export const fetchConversationHistory = async function fetchConversationHistory(
   page = 1,
   limit = 20,
   append = false,
+  loadOlder = false,
 ) {
   try {
-    // 清空现有的 conversationItems（仅在重新加载当前对话时）
-    if (!append && row?.chat_id) {
+    // 清空现有的 conversationItems（仅在重置时，即 append=false 且 loadOlder=false）
+    // 注意：loadOlder=true 时，append=false，但不应该清空，因为要从前面插入
+    if (!append && !loadOlder && row?.chat_id) {
       conversationItems.value = []
     }
 
@@ -125,7 +127,16 @@ export const fetchConversationHistory = async function fetchConversationHistory(
     } else if (res.ok) {
       const data = await res.json()
       if (data && Array.isArray(data.data?.records)) {
-        const records = data.data.records
+        let records = data.data.records
+        
+        // 确保 records 按 uuid 去重（防止后端返回重复数据）
+        const uniqueRecords = new Map<string, any>()
+        for (const record of records) {
+          if (record.uuid && !uniqueRecords.has(record.uuid)) {
+            uniqueRecords.set(record.uuid, record)
+          }
+        }
+        records = Array.from(uniqueRecords.values())
 
         // 初始化左右对话侧列表数据
         if (isInit.value || !row?.chat_id) {
@@ -152,6 +163,7 @@ export const fetchConversationHistory = async function fetchConversationHistory(
         const itemsToAdd: any[] = []
         // 用户问题
         let question_str = ''
+        const processedUuids = new Set<string>() // 用于追踪已处理的 uuid，防止重复
         for (const record of records) {
           // 问答类型
           let qa_type_str = ''
@@ -162,6 +174,13 @@ export const fetchConversationHistory = async function fetchConversationHistory(
           // 自定义id
           let uuid_str = ''
           const streamDataArray: StreamData[] = [];
+          // 如果已经处理过这个 uuid，跳过
+          if (record.uuid && processedUuids.has(record.uuid)) {
+            continue
+          }
+          if (record.uuid) {
+            processedUuids.add(record.uuid)
+          }
           [
             'question',
             'to2_answer',
@@ -227,6 +246,20 @@ export const fetchConversationHistory = async function fetchConversationHistory(
               body: stream,
             })
 
+            // 从 to4_answer 中提取图表数据
+            let chartData = null
+            const t04Data = streamDataArray.find(item => item.dataType === 't04')
+            if (t04Data && t04Data.data) {
+              try {
+                const parsedData = typeof t04Data.data === 'string' ? JSON.parse(t04Data.data) : t04Data.data
+                if (parsedData && parsedData.data) {
+                  chartData = parsedData.data
+                }
+              } catch (e) {
+                console.log('Error parsing t04_answer chart data:', e)
+              }
+            }
+
             if (error === 0 && reader) {
               itemsToAdd.push({
                 uuid: uuid_str,
@@ -241,10 +274,11 @@ export const fetchConversationHistory = async function fetchConversationHistory(
               itemsToAdd.push({
                 chat_id: chat_id_str,
                 qa_type: qa_type_str,
-                question: question_str,
+                question: '', // 修复：assistant 不应该显示用户问题
                 file_key: [],
                 role: 'assistant',
                 reader,
+                chartData, // 从历史数据中提取的图表数据
               })
             }
           }
@@ -252,13 +286,20 @@ export const fetchConversationHistory = async function fetchConversationHistory(
 
         // 只有在查看具体对话时才更新右侧内容
         if (row?.chat_id) {
-          conversationItems.value = append
-            ? [...conversationItems.value, ...itemsToAdd]
-            : itemsToAdd
-          // 这里删除对话后需要重置当前渲染索引
-          currentRenderIndex.value = append
-            ? conversationItems.value.length - 1
-            : 0
+          if (loadOlder) {
+            // 加载更旧的消息时，从前面插入
+            conversationItems.value = [...itemsToAdd, ...conversationItems.value]
+            // 保持滚动位置（需要在前端处理）
+            currentRenderIndex.value = itemsToAdd.length
+          } else if (append) {
+            // 向后加载时，从后面追加
+            conversationItems.value = [...conversationItems.value, ...itemsToAdd]
+            currentRenderIndex.value = conversationItems.value.length - 1
+          } else {
+            // 重置时，直接替换（只有在reset=true时才会到这里）
+            conversationItems.value = itemsToAdd
+            currentRenderIndex.value = 0
+          }
         }
 
         return {

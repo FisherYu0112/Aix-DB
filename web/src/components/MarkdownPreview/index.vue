@@ -1,10 +1,9 @@
 <script lang="ts" setup>
 import type { TransformStreamModelTypes } from './transform'
-import MarkdownEcharts from './markdown-echarts.vue'
-import MarkdownTable from './markdown-table.vue'
+import MarkdownAntv from './markdown-antv.vue'
 import MarkdownInstance from './plugins/markdown'
+import SuggestedView from '@/views/chat/suggested-page.vue'
 import {
-
   transformStreamValue,
 } from './transform'
 
@@ -19,6 +18,7 @@ const props = withDefaults(defineProps<Props>(), {
   qaType: '', // 问答类型
   model: 'standard',
   parentScollBottomMethod: () => {},
+  chartData: null, // 图表数据，用于多轮对话数据隔离
 })
 
 // 自定义事件用于 子父组件传递事件信息
@@ -31,6 +31,7 @@ const emit = defineEmits([
   'recycleQa',
   'praiseFeadBack',
   'belittleFeedback',
+  'suggested',
 ])
 
 const { copy, copyDuration } = useClipText()
@@ -43,6 +44,12 @@ interface Props {
   reader?: ReadableStreamDefaultReader<Uint8Array> | null
   model?: TransformStreamModelTypes
   parentScollBottomMethod?: () => void // 父组件滚动方法
+  chartData?: { // 图表数据，用于多轮对话数据隔离
+    template_code?: string
+    columns?: string[]
+    data?: any[]
+    recommended_questions?: string[]
+  } | null
 }
 
 // 解构 props
@@ -143,6 +150,25 @@ const currentChartType = ref('')
 
 // 读取数据流
 const readTextStream = async () => {
+  // 对于历史对话，如果 isView=true 且 chartData 存在，直接设置为完成状态以显示图表
+  // 无论 reader 是否存在，都应该优先使用 chartData
+  if (props.isView && props.chartData) {
+    const chartData = props.chartData
+    if (chartData && chartData.template_code) {
+      currentChartType.value = chartData.template_code
+    }
+    isCompleted.value = true
+    readIsOver.value = true
+    emit('completed')
+    emit('chartready')
+    
+    // 如果 reader 不存在，直接返回
+    if (!props.reader) {
+      return
+    }
+    // 如果 reader 存在，继续处理流，但图表已经在上面设置了
+  }
+  
   if (!props.reader) {
     return
   }
@@ -165,6 +191,10 @@ const readTextStream = async () => {
       }
       if (done) {
         readIsOver.value = true
+        // 如果流已完成，确保触发 showText 来处理结束逻辑
+        if (typingAnimationFrame === null) {
+          showText()
+        }
         break
       }
 
@@ -180,7 +210,10 @@ const readTextStream = async () => {
       )
       if (stream.done) {
         readIsOver.value = true
-
+        // 如果流已完成，确保触发 showText 来处理结束逻辑
+        if (typingAnimationFrame === null) {
+          showText()
+        }
         break
       }
 
@@ -268,10 +301,15 @@ const showText = () => {
       },
       () => {
         // 这里只有需要显示图表数据时才显示图表
-        const dataType = businessStore.writerList.dataType
-        if (dataType && dataType === 't04') {
-          currentChartType.value
-                        = businessStore.writerList.data.template_code
+        // 优先使用 props.chartData（历史对话），否则使用全局 store（实时对话）
+        const chartData = props.chartData || businessStore.writerList?.data
+        if (chartData && chartData.template_code) {
+          currentChartType.value = chartData.template_code
+        } else {
+          const dataType = businessStore.writerList?.dataType
+          if (dataType && dataType === 't04') {
+            currentChartType.value = businessStore.writerList.data.template_code
+          }
         }
 
         emit('update:reader', null)
@@ -294,6 +332,14 @@ watch(
   () => {
     if (props.reader) {
       readTextStream()
+    } else if (props.isView && props.chartData) {
+      // 对于历史对话，如果 reader 为空但 chartData 存在，直接设置为完成状态以显示图表
+      const chartData = props.chartData
+      if (chartData && chartData.template_code) {
+        currentChartType.value = chartData.template_code
+      }
+      isCompleted.value = true
+      readIsOver.value = true
     }
   },
   {
@@ -371,6 +417,28 @@ const onChartCompletedReader = function () {
   emit('chartready')
 }
 
+// 推荐问题点击事件
+const onSuggested = function (index: number) {
+  // 优先使用 props.chartData（历史对话），否则使用全局 store（实时对话）
+  const chartData = props.chartData || businessStore.writerList?.data
+  const recommendedQuestions = chartData?.recommended_questions || []
+  if (recommendedQuestions && recommendedQuestions.length > index) {
+    emit('suggested', recommendedQuestions[index])
+  }
+}
+
+// 获取推荐问题列表
+const recommendedQuestions = computed(() => {
+  // 优先使用 props.chartData（历史对话），否则使用全局 store（实时对话）
+  const chartData = props.chartData || businessStore.writerList?.data
+  return chartData?.recommended_questions || []
+})
+
+// 图表渲染条件
+const shouldRenderChart = computed(() => {
+  return currentChartType.value && isCompleted.value
+})
+
 const qaOptions = [
   { icon: 'i-hugeicons:ai-chat-02', label: '智能问答', value: 'COMMON_QA', color: '#7E6BF2' },
   { icon: 'i-hugeicons:database-01', label: '数据问答', value: 'DATABASE_QA', color: '#10b981' },
@@ -435,11 +503,7 @@ const currentQaOption = computed(() => {
           ></div>
 
           <div
-            v-if="
-              currentChartType
-                && currentChartType !== 'temp01'
-                && isCompleted
-            "
+            v-if="shouldRenderChart"
             whitespace-break-spaces
             text-center
             :style="{
@@ -449,29 +513,25 @@ const currentQaOption = computed(() => {
               'margin-right': `0`,
             }"
           >
-            <MarkdownEcharts
+            <MarkdownAntv
               :chart-id="props.chartId"
+              :chart-data="props.chartData"
               @chart-rendered="() => onChartCompletedReader()"
+              @table-rendered="() => onTableCompletedReader()"
             />
           </div>
-
           <div
-            v-if="
-              currentChartType
-                && currentChartType === 'temp01'
-                && isCompleted
-            "
-            whitespace-break-spaces
-            text-center
+            v-if="recommendedQuestions.length > 0 && isCompleted"
+            class="w-full mt-4"
             :style="{
-              'align-items': `center`,
-              'width': `100%`,
-              'margin-left': `0`,
-              'margin-right': `0`,
+              'background-color': '#f6f7fb',
+              'padding': '16px 0',
+              'margin-top': currentChartType ? '16px' : '0',
             }"
           >
-            <MarkdownTable
-              @table-rendered="() => onTableCompletedReader()"
+            <SuggestedView
+              :labels="recommendedQuestions"
+              @suggested="onSuggested"
             />
           </div>
           <div

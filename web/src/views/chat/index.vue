@@ -41,6 +41,19 @@ const hasMoreHistory = computed(
   () => historyPage.value <= historyTotalPages.value,
 )
 
+// 对话历史分页状态（点击某个对话记录时使用）
+const conversationHistoryPage = ref(1)
+const conversationHistoryTotalPages = ref(1)
+const conversationHistoryPageSize = 3
+const currentConversationChatId = ref<string | null>(null)
+const isLoadingConversationHistory = ref(false)
+const isLoadingMoreConversationHistory = ref(false)
+// 当前已加载的最大页码（用于判断是否还有更多页面）
+const conversationHistoryCurrentLoadedPage = ref(1)
+const hasMoreConversationHistory = computed(
+  () => conversationHistoryCurrentLoadedPage.value < conversationHistoryTotalPages.value,
+)
+
 // 管理对话
 const isModalOpen = ref(false)
 function openModal() {
@@ -54,6 +67,10 @@ function handleModalClose(value) {
     isInit.value = true
     // 重新加载对话记录
     loadHistoryList({ reset: true })
+    // 恢复到新对话页面
+    if (!showDefaultPage.value) {
+      newChat()
+    }
   }
 }
 
@@ -73,6 +90,9 @@ function newChat() {
 
   // 清除表格选中状态
   currentIndex.value = null
+
+  // 重置查看历史消息标识
+  isView.value = false
 
   // 新增：生成当前问答类型的新uuid
   uuids.value[qa_type.value] = uuidv4()
@@ -212,12 +232,24 @@ const conversationItems = ref<
       parse_file_key: string
       file_size: string
     }[]
+    chartData?: { // 图表数据，用于多轮对话数据隔离
+      template_code?: string
+      columns?: string[]
+      data?: any[]
+    } | null
   }>
 >([])
 
 // 这里子组件 chart渲染慢需要子组件渲染完毕后通知父组件
+// 但是，当查看历史记录时（isView=true），所有数据都是静态的，不需要渐进式渲染，应该显示全部
 const visibleConversationItems = computed(() => {
-  return conversationItems.value.slice(0, currentRenderIndex.value + 2)
+  if (isView.value) {
+    // 查看历史记录时，显示所有项目
+    return conversationItems.value
+  } else {
+    // 实时对话时，使用渐进式渲染
+    return conversationItems.value.slice(0, currentRenderIndex.value + 2)
+  }
 })
 // 这里控制内容加载状态
 const contentLoadingStates = ref(
@@ -439,10 +471,27 @@ const handleCreateStylized = async (
       file_key: [],
       role: 'assistant',
       reader,
+      chartData: null, // 初始化为 null，数据到达时更新
     })
 
     // 更新 currentRenderIndex 以包含新添加的项
-    currentRenderIndex.value = conversationItems.value.length - 1
+    const assistantIndex = conversationItems.value.length - 1
+    currentRenderIndex.value = assistantIndex
+
+    // 监听 writerList 变化，将数据保存到对应的对话项中
+    const stopWatcher = watch(
+      () => businessStore.writerList,
+      (newWriterList) => {
+        if (newWriterList?.dataType === 't04' && newWriterList?.data) {
+          if (assistantIndex < conversationItems.value.length && conversationItems.value[assistantIndex].role === 'assistant') {
+            conversationItems.value[assistantIndex].chartData = newWriterList.data
+            // 数据保存后停止监听
+            stopWatcher()
+          }
+        }
+      },
+      { deep: true, immediate: false },
+    )
 
     // 清空文件上传列表
     pendingUploadFileInfoList.value = []
@@ -763,9 +812,14 @@ const checkScrollPosition = () => {
     showScrollToBottom.value = !isAtBottom && scrollTop > scrollThreshold
   }
 }
-// 新增：监听滚动事件
+// 新增：监听滚动事件（统一入口，内部根据isView判断）
 const handleScroll = () => {
-  checkScrollPosition()
+  // 如果是查看历史消息模式，调用handleConversationScroll
+  if (isView.value) {
+    handleConversationScroll()
+  } else {
+    checkScrollPosition()
+  }
 }
 
 // 在 onMounted 或 onBeforeMount 中添加事件监听
@@ -854,6 +908,103 @@ const handleDatasourceSelect = (ds: any) => {
 // Navigation Rail Items - REMOVED
 // const navRailItems = ...
 
+// 加载对话历史（根据chat_id分页加载）
+const loadConversationHistory = async (item: any, reset: boolean = true, loadOlder: boolean = false) => {
+  if (isLoadingConversationHistory.value || isLoadingMoreConversationHistory.value) {
+    return
+  }
+
+  if (reset) {
+    conversationHistoryPage.value = 1
+    conversationHistoryTotalPages.value = 1
+    conversationHistoryCurrentLoadedPage.value = 1
+    conversationItems.value = []
+    currentConversationChatId.value = item.chat_id
+  }
+
+  let pageToLoad = conversationHistoryPage.value
+  const append = !reset && !loadOlder // 向后加载时append=true，向前加载时append=false
+
+  // 如果是加载更旧的消息，需要加载前面的页面
+  if (loadOlder && conversationHistoryPage.value > 1) {
+    pageToLoad = conversationHistoryPage.value - 1
+  }
+  // 向后加载时，使用 conversationHistoryPage.value（即下一页）
+  // 注意：conversationHistoryPage.value 表示"下一个要加载的页码"
+
+  if (!reset && !loadOlder) {
+    isLoadingMoreConversationHistory.value = true
+  } else {
+    isLoadingConversationHistory.value = true
+  }
+
+  try {
+    const meta = await fetchConversationHistory(
+    isInit,
+    conversationItems,
+    tableData,
+    currentRenderIndex,
+    item,
+    '',
+      pageToLoad,
+      conversationHistoryPageSize,
+      append,
+      loadOlder, // 传递loadOlder参数，用于从前面插入
+    )
+    if (meta) {
+      conversationHistoryTotalPages.value = meta.totalPages
+      if (loadOlder) {
+        // 加载更旧的页面时，更新 conversationHistoryPage 为已加载的页码
+        conversationHistoryPage.value = pageToLoad
+        // 加载更旧的页面时，更新已加载的最大页码
+        if (pageToLoad < conversationHistoryCurrentLoadedPage.value) {
+          conversationHistoryCurrentLoadedPage.value = pageToLoad
+        }
+      } else {
+        // 加载更新的页面时，确保 conversationHistoryPage 不超过 totalPages
+        const nextPage = meta.currentPage + 1
+        conversationHistoryPage.value = nextPage > meta.totalPages ? meta.totalPages : nextPage
+        // 加载更新的页面时，更新已加载的最大页码
+        if (meta.currentPage > conversationHistoryCurrentLoadedPage.value) {
+          conversationHistoryCurrentLoadedPage.value = meta.currentPage
+        }
+      }
+    }
+  } catch (error) {
+    console.error('加载对话历史失败:', error)
+    window.$ModalMessage.error('加载对话历史失败，请重试')
+  } finally {
+    isLoadingConversationHistory.value = false
+    isLoadingMoreConversationHistory.value = false
+  }
+}
+
+// 对话内容区域滚动加载更多（滚动到顶部时加载更旧的消息，滚动到底部时加载更新的消息）
+const handleConversationScroll = () => {
+  if (!messagesContainer.value || !currentConversationChatId.value || isLoadingMoreConversationHistory.value || isLoadingConversationHistory.value) {
+    return
+  }
+  
+  const el = messagesContainer.value
+  const isNearTop = el.scrollTop <= 50 // 滚动到顶部附近时加载更旧的消息
+  const isNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 10 // 滚动到底部附近时加载更新的消息
+  
+  const currentItem = tableData.value.find(item => item.chat_id === currentConversationChatId.value)
+  if (!currentItem) {
+    return
+  }
+  
+  // 如果还有更旧的页面，加载更旧的页面
+  // 修复：只有在 conversationHistoryPage > 1 且 conversationHistoryCurrentLoadedPage > 1 时才加载更旧的页面
+  if (isNearTop && conversationHistoryPage.value > 1 && conversationHistoryCurrentLoadedPage.value > 1) {
+    loadConversationHistory(currentItem, false, true) // loadOlder=true，加载更旧的页面
+  }
+  // 如果还有更新的页面，加载更新的页面
+  else if (isNearBottom && hasMoreConversationHistory.value) {
+    loadConversationHistory(currentItem, false, false) // loadOlder=false，加载更新的页面（向后追加）
+  }
+}
+
 // Handle History Item Click (Replaces rowProps)
 const handleHistoryClick = async (item: any) => {
   backgroundColorVariable.value = '#fff'
@@ -864,26 +1015,18 @@ const handleHistoryClick = async (item: any) => {
   isInit.value = false
   isView.value = true
 
-  // 这里根据chat_id 过滤同一轮对话数据
-  await fetchConversationHistory(
-    isInit,
-    conversationItems,
-    tableData,
-    currentRenderIndex,
-    item,
-    '',
-    1,
-    999999,
-    false,
-  )
+  // 这里根据chat_id 过滤同一轮对话数据，使用分页加载
+  await loadConversationHistory(item, true)
 
   // 关闭默认页面
   showDefaultPage.value = false
 
   //   等待 DOM 更新完成
   await nextTick()
-  //  滚动到指定位置
-  scrollToItem(item.uuid)
+  //  滚动到底部（显示最新消息）
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
 
   onAqtiveChange(item.qa_type, item.chat_id)
 
@@ -1188,6 +1331,7 @@ const handleHistoryClick = async (item: any) => {
                     :is-view="isView"
                     :qa-type="`${item.qa_type}`"
                     :chart-id="`${index}devID${generateRandomSuffix()}`"
+                    :chart-data="item.chartData"
                     :parent-scoll-bottom-method="scrollToBottom"
                     @failed="() => onFailedReader(index)"
                     @completed="() => onCompletedReader(index)"
@@ -1198,6 +1342,7 @@ const handleHistoryClick = async (item: any) => {
                       () => onBelittleFeedback(index)
                     "
                     @begin-read="() => onBeginRead(index)"
+                    @suggested="(question) => handleCreateStylized(question)"
                   />
                 </div>
               </div>

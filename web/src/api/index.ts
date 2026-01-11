@@ -92,7 +92,7 @@ export async function query_user_qa_record(page, limit, search_text, chat_id) {
     },
     body: JSON.stringify({
       page,
-      limit,
+      size: limit, // 后端期望的字段名是 size，不是 limit
       search_text,
       chat_id,
     }),

@@ -63,7 +63,12 @@ class AgentState(TypedDict):
     report_summary: Optional[str]  # 报告摘要
     attempts: int = 0  # 尝试次数
     correct_attempts: int = 0  # 正确尝试次数
-    chart_url: Optional[str]  # AntV MCP图表地址
+    chart_url: Optional[str]  # AntV MCP图表地址(已废弃)
     chart_type: Optional[str]  # 图表类型
-    apache_chart_data: Optional[Dict[str, Any]]  # Apache图表数据
+    chart_config: Optional[Dict[str, Any]]  # 图表配置（AntV 格式）
+    apache_chart_data: Optional[Dict[str, Any]]  # Apache图表数据(已废弃)
+    render_data: Optional[Dict[str, Any]]  # 渲染数据(包含 columns 和 data)
     datasource_id: Optional[int]  # 数据源ID
+    user_id: Optional[int]  # 用户ID（用于权限过滤）
+    filtered_sql: Optional[str]  # 权限过滤后的SQL
+    recommended_questions: Optional[List[str]]  # 推荐问题列表

@@ -29,6 +29,8 @@ logs/
 docker/.env
 *.log
 .env.local
+.vscode/
+.cursor/
 
 # claude code 配置信息
 CLAUDE.md

@@ -27,13 +27,13 @@
     "stylelint:fix": "stylelint --fix .scss, .vue ./src"
   },
   "dependencies": {
+    "@antv/g2plot": "^2.4.35",
     "@antv/x6": "^2.18.1",
     "@modelcontextprotocol/sdk": "^1.8.0",
     "@types/three": "^0.181.0",
     "@vueuse/core": "^10.10.0",
     "axios": "1.7.2",
     "dompurify": "^3.1.5",
-    "echarts": "^5.5.1",
     "js-cookie": "^3.0.5",
     "lodash-es": "^4.17.21",
     "marked": "^13.0.1",

@@ -54,7 +54,7 @@ export const useBusinessStore = defineStore('business-store', {
       this.writerList = writerList
     },
     clearWriterList() {
-      this.writerList = []
+      this.writerList = {}
     },
     update_task_id(task_id) {
       this.task_id = task_id

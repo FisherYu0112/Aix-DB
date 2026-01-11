@@ -77,7 +77,8 @@ class LLMRequest:
 
             #  使用正则表达式移除所有空白字符（包括空格、制表符、换行符等）
             query = req_obj.get("query")
-            cleaned_query = re.sub(r"\s+", "", query)
+            # 仅对 FILEDATA_QA 和 REPORT_QA 使用清理后的查询，DATABASE_QA 和 COMMON_QA 使用原始查询
+            cleaned_query = re.sub(r"\s+", "", query) if query else ""
 
             # 获取登录用户信息
             if token is None:
