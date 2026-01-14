@@ -12,7 +12,8 @@ from py2neo import Graph
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from model.datasource_models import Datasource, DatasourceTable, DatasourceField
+from model.datasource_models import Datasource, DatasourceTable, DatasourceField, DatasourceAuth
+from common.permission_util import is_admin
 from model.db_connection_pool import get_db_pool
 from model.db_models import TAiModel
 from langfuse.openai import OpenAI
@@ -25,11 +26,38 @@ class DatasourceService:
 
     @staticmethod
     def get_datasource_list(session: Session, user_id: Optional[int] = None) -> List[Datasource]:
-        """获取数据源列表"""
+        """
+        获取数据源列表
+        管理员（role='admin'）看到所有数据源，普通用户只看到被授权的数据源
+        """
         query = session.query(Datasource)
 
+        # 如果是管理员，返回所有数据源
+        if user_id and is_admin(user_id):
+            return query.order_by(Datasource.create_time.desc()).all()
+        
+        # 普通用户：只返回被授权的数据源
         if user_id:
-            query = query.filter(Datasource.create_by == user_id)
+            # 查询用户被授权的数据源ID列表
+            auth_ds_ids = (
+                session.query(DatasourceAuth.datasource_id)
+                .filter(
+                    and_(
+                        DatasourceAuth.user_id == user_id,
+                        DatasourceAuth.enable == True
+                    )
+                )
+                .distinct()
+                .all()
+            )
+            auth_ds_ids = [ds_id[0] for ds_id in auth_ds_ids]
+            
+            if auth_ds_ids:
+                query = query.filter(Datasource.id.in_(auth_ds_ids))
+            else:
+                # 如果用户没有任何授权，返回空列表
+                return []
+        
         return query.order_by(Datasource.create_time.desc()).all()
 
     @staticmethod
@@ -715,6 +743,57 @@ class DatasourceService:
         except Exception as e:
             logger.error(f"获取 Neo4j 关系失败: {e}", exc_info=True)
             return []
+
+    @staticmethod
+    def get_authorized_users(session: Session, datasource_id: int) -> List[int]:
+        """
+        获取数据源已授权的用户ID列表
+        
+        Args:
+            session: 数据库会话
+            datasource_id: 数据源ID
+            
+        Returns:
+            List[int]: 已授权的用户ID列表
+        """
+        auths = session.query(DatasourceAuth).filter(
+            and_(
+                DatasourceAuth.datasource_id == datasource_id,
+                DatasourceAuth.enable == True
+            )
+        ).all()
+        return [auth.user_id for auth in auths]
+
+    @staticmethod
+    def authorize_datasource(session: Session, datasource_id: int, user_ids: List[int]) -> bool:
+        """
+        授权用户使用数据源
+        
+        Args:
+            session: 数据库会话
+            datasource_id: 数据源ID
+            user_ids: 用户ID列表
+            
+        Returns:
+            bool: 授权成功返回True
+        """
+        # 先删除该数据源的旧授权（如果存在）
+        session.query(DatasourceAuth).filter(
+            DatasourceAuth.datasource_id == datasource_id
+        ).delete(synchronize_session=False)
+        
+        # 添加新授权
+        for user_id in user_ids:
+            auth = DatasourceAuth(
+                datasource_id=datasource_id,
+                user_id=user_id,
+                enable=True,
+                create_time=datetime.now()
+            )
+            session.add(auth)
+        
+        session.commit()
+        return True
 
 
 def sync_table_relation_to_neo4j(relation_data: List[Dict[str, Any]]):

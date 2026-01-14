@@ -65,6 +65,34 @@ class Text2SqlAgent:
                 datasource_id=datasource_id,
                 user_id=user_id
             )
+            
+            # 检查数据源权限（如果指定了 datasource_id）
+            # 权限检查结果会通过 datasource_selector 节点处理，统一通过 error_handler 节点流式输出
+            if datasource_id:
+                from model.db_connection_pool import get_db_pool
+                from model.datasource_models import DatasourceAuth
+                from common.permission_util import is_admin
+                from sqlalchemy import and_
+                
+                db_pool = get_db_pool()
+                with db_pool.get_session() as session:
+                    # 管理员跳过权限检查
+                    if not is_admin(user_id):
+                        # 检查用户是否有该数据源的权限
+                        auth = session.query(DatasourceAuth).filter(
+                            and_(
+                                DatasourceAuth.datasource_id == datasource_id,
+                                DatasourceAuth.user_id == user_id,
+                                DatasourceAuth.enable == True
+                            )
+                        ).first()
+                        
+                        if not auth:
+                            # 无权限，设置错误消息，让 error_handler 节点统一处理
+                            error_msg = "您没有访问该数据源的权限，请联系管理员授权。"
+                            logger.warning(f"用户 {user_id} 尝试访问未授权的数据源 {datasource_id}")
+                            initial_state["error_message"] = error_msg
+                            initial_state["datasource_id"] = None  # 清空 datasource_id，让流程进入 error_handler
             graph: CompiledStateGraph = create_graph(datasource_id)
 
             # 标识对话状态
@@ -229,7 +257,7 @@ class Text2SqlAgent:
             # 数据源异常节点：仅输出友好的错误提示，不再继续后续步骤
             "error_handler": lambda: step_value.get(
                 "error_message",
-                "当前没有可用的数据源，请先在数据源管理中配置或重新选择数据源后再进行数据问答。",
+                "当前没有可用的数据源，请联系管理员。",
             ),
             "schema_inspector": lambda: self._format_db_info(step_value["db_info"]),
             "table_relationship": lambda: json.dumps(step_value["table_relationship"], ensure_ascii=False),

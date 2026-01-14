@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     404: typeof import('./src/components/404.vue')['default']
     ClipBoard: typeof import('./src/components/ClipBoard/index.vue')['default']
+    DatasourceAuthModal: typeof import('./src/components/datasource/datasource-auth-modal.vue')['default']
     DatasourceForm: typeof import('./src/components/datasource/datasource-form.vue')['default']
     IconFont: typeof import('./src/components/IconFont/index.vue')['default']
     IconFontQatypeIcon: typeof import('./src/components/IconFont/qatype-icon.vue')['default']
@@ -33,6 +34,7 @@ declare module 'vue' {
     NavigationNavSideBar: typeof import('./src/components/Navigation/NavSideBar.vue')['default']
     NavigationSidebar: typeof import('./src/components/Navigation/sidebar.vue')['default']
     NavigationSideBar: typeof import('./src/components/Navigation/SideBar.vue')['default']
+    NBadge: typeof import('naive-ui')['NBadge']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
     NCheckbox: typeof import('naive-ui')['NCheckbox']
@@ -65,6 +67,7 @@ declare module 'vue' {
     NRadio: typeof import('naive-ui')['NRadio']
     NRadioGroup: typeof import('naive-ui')['NRadioGroup']
     NResult: typeof import('naive-ui')['NResult']
+    NScrollbar: typeof import('naive-ui')['NScrollbar']
     NSelect: typeof import('naive-ui')['NSelect']
     NSpace: typeof import('naive-ui')['NSpace']
     NSpin: typeof import('naive-ui')['NSpin']

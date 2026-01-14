@@ -455,7 +455,7 @@ const handleCreateStylized = async (
   }
 
   // 调用大模型
-  const { error, reader, needLogin }
+  const { error, reader, needLogin, permissionDenied, errorMessage }
     = await businessStore.createAssistantWriterStylized(
       uuid_str,
       uuids.value[currentQaType],
@@ -480,6 +480,26 @@ const handleCreateStylized = async (
     setTimeout(() => {
       router.push('/login')
     }, 500)
+  }
+
+  // 处理权限被拒绝的情况
+  if (permissionDenied) {
+    // 显示权限错误消息提醒
+    message.warning(errorMessage || '您没有访问该数据源的权限，请联系管理员授权。')
+    
+    // 重置对话状态
+    stylizingLoading.value = false
+    onCompletedReader(conversationItems.value.length - 1)
+    
+    // 移除最后添加的用户消息（因为权限检查失败，不应该保留这次对话）
+    if (conversationItems.value.length > 0 && conversationItems.value[conversationItems.value.length - 1].role === 'user') {
+      conversationItems.value.pop()
+    }
+    
+    // 清空文件上传列表
+    pendingUploadFileInfoList.value = []
+    businessStore.clear_file_list()
+    return
   }
 
   if (error) {

@@ -193,6 +193,112 @@ def trans_tree_item(
         return f"{where_name}{where_term}{where_value}"
 
 
+def _optimize_in_conditions(
+    raw_conditions: List[tuple],
+    logic: str,
+    db_type: str,
+    table_name: Optional[str],
+    session: Session,
+) -> List[str]:
+    """
+    优化合并相同字段的多个 IN/NOT IN 条件
+    
+    Args:
+        raw_conditions: 原始条件列表，每个元素是 (item, sql_condition) 元组
+        logic: 逻辑连接符（AND 或 OR）
+        db_type: 数据库类型
+        table_name: 表名
+        session: 数据库会话
+        
+    Returns:
+        优化后的条件列表
+    """
+    # 如果逻辑是 OR，不进行合并优化（因为语义不同）
+    if logic.upper() == "OR":
+        return [exp for _, exp in raw_conditions]
+    
+    # 按字段分组收集 IN/NOT IN 条件
+    in_conditions_map = {}  # {(field_id, term): [values]}
+    other_conditions = []  # 其他条件
+    
+    for item, exp in raw_conditions:
+        if item and item.get("term") in ["in", "not in"]:
+            field_id = item.get("field_id")
+            term = item.get("term")
+            value = item.get("value", "")
+            
+            if field_id:
+                key = (field_id, term)
+                if isinstance(value, str):
+                    values = [v.strip() for v in value.split(",")]
+                elif isinstance(value, list):
+                    values = value
+                else:
+                    values = [str(value)]
+                
+                if key not in in_conditions_map:
+                    in_conditions_map[key] = []
+                in_conditions_map[key].extend(values)
+        else:
+            # 其他类型的条件直接保留
+            other_conditions.append(exp)
+    
+    # 合并相同字段的 IN/NOT IN 条件
+    optimized_conditions = []
+    for (field_id, term), values in in_conditions_map.items():
+        if not values:
+            continue
+        
+        # 去重并保持顺序
+        unique_values = []
+        seen = set()
+        for v in values:
+            if v not in seen:
+                unique_values.append(v)
+                seen.add(v)
+        
+        # 获取字段信息
+        try:
+            field = session.query(DatasourceField).filter(DatasourceField.id == int(field_id)).first()
+            if not field:
+                continue
+            
+            field_name = field.field_name
+            field_type = field.field_type or ""
+            
+            # 获取数据库引号配置
+            quote_config = get_db_quote_config(db_type)
+            prefix = quote_config["prefix"]
+            suffix = quote_config["suffix"]
+            
+            # 构建字段名
+            if table_name:
+                where_name = f"{prefix}{table_name}{suffix}.{prefix}{field_name}{suffix}"
+            else:
+                where_name = f"{prefix}{field_name}{suffix}"
+            
+            # 构建 SQL 条件
+            where_term = trans_filter_term(term)
+            if db_type.lower() in ['sqlserver', 'mssql'] and field_type.upper() in ['NCHAR', 'NVARCHAR']:
+                values_str = "', N'".join(unique_values)
+                where_value = f"(N'{values_str}')"
+            else:
+                values_str = "', '".join(unique_values)
+                where_value = f"('{values_str}')"
+            
+            optimized_conditions.append(f"{where_name}{where_term}{where_value}")
+        except Exception as e:
+            logger.warning(f"优化 IN 条件时出错: {e}")
+            # 如果优化失败，保留原始条件
+            for item, exp in raw_conditions:
+                if item and item.get("field_id") == field_id and item.get("term") == term:
+                    optimized_conditions.append(exp)
+                    break
+    
+    # 合并优化后的条件和其他条件
+    return optimized_conditions + other_conditions
+
+
 def trans_tree_to_where(
     session: Session,
     tree: Dict[str, Any],
@@ -220,20 +326,27 @@ def trans_tree_to_where(
     if not items:
         return None
     
-    conditions = []
+    # 先收集所有条件，然后优化合并相同字段的 IN/NOT IN 条件
+    raw_conditions = []
     for item in items:
         if item.get("type") == "item":
             # 处理叶子节点
             exp = trans_tree_item(session, item, db_type, table_name)
             if exp:
-                conditions.append(exp)
+                raw_conditions.append((item, exp))
         elif item.get("type") == "tree":
             # 处理子树
             sub_tree = item.get("sub_tree")
             if sub_tree:
                 exp = trans_tree_to_where(session, sub_tree, db_type, table_name)
                 if exp:
-                    conditions.append(exp)
+                    raw_conditions.append((None, exp))
+    
+    if not raw_conditions:
+        return None
+    
+    # 优化：合并相同字段的多个 IN/NOT IN 条件
+    conditions = _optimize_in_conditions(raw_conditions, logic, db_type, table_name, session)
     
     if not conditions:
         return None
@@ -242,7 +355,9 @@ def trans_tree_to_where(
     if len(conditions) == 1:
         return conditions[0]
     else:
-        return f"({' ' + logic + ' '.join(conditions)})"
+        # 使用逻辑连接符连接条件，确保格式正确：condition1 AND condition2
+        joined = f" {logic} ".join(conditions)
+        return f"({joined})"
 
 
 def trans_filter_tree(

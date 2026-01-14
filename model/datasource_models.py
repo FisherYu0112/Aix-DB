@@ -3,7 +3,7 @@
 """
 import datetime
 from typing import Optional, List
-from sqlalchemy import Column, BigInteger, DateTime, Text, JSON
+from sqlalchemy import Column, BigInteger, DateTime, Text, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from model.db_connection_pool import Base
 
@@ -55,4 +55,16 @@ class DatasourceField(Base):
     field_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="字段注释")
     custom_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="自定义注释")
     field_index: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, comment="字段顺序")
+
+
+class DatasourceAuth(Base):
+    """数据源授权表"""
+    __tablename__ = "t_datasource_auth"
+    __table_args__ = {"comment": "数据源授权表"}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    datasource_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="数据源ID")
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="用户ID")
+    enable: Mapped[bool] = mapped_column(default=True, comment="是否启用")
+    create_time: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True, comment="创建时间")
 

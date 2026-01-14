@@ -14,6 +14,7 @@ from common.res_decorator import async_json_resp
 from common.exception import MyException
 from constants.code_enum import SysCodeEnum
 from services.user_service import get_user_info
+from common.permission_util import check_admin_permission
 from common.param_parser import parse_params
 from model.schemas import (
     DatasourceListResponse,
@@ -43,6 +44,9 @@ from model.schemas import (
     TableRelationResponse,
     GetTableRelationResponse,
     GetNeo4jRelationResponse,
+    DatasourceAuthRequest,
+    DatasourceAuthResponse,
+    GetAuthorizedUsersResponse,
     get_schema,
 )
 
@@ -149,10 +153,13 @@ async def get_datasource_list(req: request.Request):
 @async_json_resp
 @parse_params
 async def create_datasource(req: request.Request, body: CreateDatasourceRequest):
-    """创建数据源
+    """创建数据源（仅管理员）
     :param req: 请求对象
     :param body: 创建数据源请求体（自动从请求中解析）
     """
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
     try:
         data = body.model_dump()
 
@@ -199,10 +206,13 @@ async def create_datasource(req: request.Request, body: CreateDatasourceRequest)
 @async_json_resp
 @parse_params
 async def update_datasource(req: request.Request, body: UpdateDatasourceRequest):
-    """更新数据源
+    """更新数据源（仅管理员）
     :param req: 请求对象
     :param body: 更新数据源请求体（自动从请求中解析）
     """
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
     try:
         data = body.model_dump()
         ds_id = data.get("id")
@@ -258,11 +268,14 @@ async def update_datasource(req: request.Request, body: UpdateDatasourceRequest)
 @async_json_resp
 @parse_params
 async def sync_tables(req: request.Request, ds_id: int, body: SyncTablesRequest):
-    """同步数据源表和字段
+    """同步数据源表和字段（仅管理员）
     :param req: 请求对象
     :param ds_id: 数据源ID（路径参数）
     :param body: 同步表请求体（自动从请求中解析）
     """
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
     try:
         data = body.tables if body.tables else []
 
@@ -302,7 +315,10 @@ async def sync_tables(req: request.Request, ds_id: int, body: SyncTablesRequest)
 @async_json_resp
 @parse_params
 async def delete_datasource(req: request.Request, ds_id: int):
-    """删除数据源"""
+    """删除数据源（仅管理员）"""
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
     try:
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
@@ -894,3 +910,112 @@ async def get_neo4j_relation(req: request.Request, ds_id: int):
     except Exception as e:
         logger.error(f"获取 Neo4j 关系失败: {e}", exc_info=True)
         raise MyException(SysCodeEnum.SYSTEM_ERROR, f"获取 Neo4j 关系失败: {str(e)}")
+
+
+@bp.post("/getAuthorizedUsers/<datasource_id:int>")
+@openapi.summary("获取已授权用户")
+@openapi.description("获取数据源已授权的用户ID列表（仅管理员）")
+@openapi.tag("数据服务")
+@openapi.parameter(
+    name="datasource_id",
+    location="path",
+    schema={"type": "integer"},
+    description="数据源ID",
+    required=True,
+)
+@openapi.response(
+    200,
+    {
+        "application/json": {
+            "schema": get_schema(GetAuthorizedUsersResponse),
+        }
+    },
+    description="获取成功",
+)
+@async_json_resp
+async def get_authorized_users(req: request.Request, datasource_id: int):
+    """获取已授权用户（仅管理员）
+    :param req: 请求对象
+    :param datasource_id: 数据源ID
+    """
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
+    try:
+        db_pool = get_db_pool()
+        with db_pool.get_session() as session:
+            # 检查数据源是否存在
+            datasource = DatasourceService.get_datasource_by_id(session, datasource_id)
+            if not datasource:
+                raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
+            
+            # 获取已授权的用户ID列表
+            user_ids = DatasourceService.get_authorized_users(session, datasource_id)
+            return user_ids
+    except MyException:
+        raise
+    except Exception as e:
+        logger.error(f"获取已授权用户失败: {e}", exc_info=True)
+        raise MyException(SysCodeEnum.SYSTEM_ERROR, f"获取已授权用户失败: {str(e)}")
+
+
+@bp.post("/authorize")
+@openapi.summary("数据源授权")
+@openapi.description("授权用户使用数据源（仅管理员）")
+@openapi.tag("数据服务")
+@openapi.body(
+    {
+        "application/json": {
+            "schema": get_schema(DatasourceAuthRequest),
+        }
+    },
+    description="授权信息",
+    required=True,
+)
+@openapi.response(
+    200,
+    {
+        "application/json": {
+            "schema": get_schema(DatasourceAuthResponse),
+        }
+    },
+    description="授权成功",
+)
+@async_json_resp
+@parse_params
+async def authorize_datasource(req: request.Request, body: DatasourceAuthRequest):
+    """数据源授权（仅管理员）
+    :param req: 请求对象
+    :param body: 授权请求体（自动从请求中解析）
+    """
+    # 检查管理员权限
+    await check_admin_permission(req)
+    
+    try:
+        datasource_id = body.datasource_id
+        user_ids = body.user_ids
+        
+        if not datasource_id:
+            raise MyException(SysCodeEnum.PARAM_ERROR, "缺少数据源ID")
+        # 允许空列表，用于清空授权
+        if user_ids is None:
+            raise MyException(SysCodeEnum.PARAM_ERROR, "缺少用户ID列表")
+        
+        db_pool = get_db_pool()
+        with db_pool.get_session() as session:
+            # 检查数据源是否存在
+            datasource = DatasourceService.get_datasource_by_id(session, datasource_id)
+            if not datasource:
+                raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
+            
+            # 执行授权
+            success = DatasourceService.authorize_datasource(session, datasource_id, user_ids)
+            if not success:
+                raise MyException(SysCodeEnum.SYSTEM_ERROR, "授权失败")
+            
+            return {"message": "授权成功"}
+    except MyException:
+        raise
+    except Exception as e:
+        logger.error(f"数据源授权失败: {e}", exc_info=True)
+        raise MyException(SysCodeEnum.SYSTEM_ERROR, f"数据源授权失败: {str(e)}")

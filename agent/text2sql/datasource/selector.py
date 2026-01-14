@@ -31,9 +31,45 @@ async def datasource_selector(state: AgentState) -> AgentState:
 
     # 检查是否已有 datasource_id
     datasource_id = state.get("datasource_id")
+    user_id = state.get("user_id")
+    
     if datasource_id:
-        logger.info(f"数据源已指定: {datasource_id}，跳过数据源选择")
-        return state
+        logger.info(f"数据源已指定: {datasource_id}，检查用户权限")
+        
+        # 检查用户是否有该数据源的权限
+        from model.datasource_models import DatasourceAuth
+        from common.permission_util import is_admin
+        from sqlalchemy import and_
+        
+        try:
+            db_pool = get_db_pool()
+            with db_pool.get_session() as session:
+                # 管理员跳过权限检查
+                if not is_admin(user_id):
+                    # 检查用户是否有该数据源的权限
+                    auth = session.query(DatasourceAuth).filter(
+                        and_(
+                            DatasourceAuth.datasource_id == datasource_id,
+                            DatasourceAuth.user_id == user_id,
+                            DatasourceAuth.enable == True
+                        )
+                    ).first()
+                    
+                    if not auth:
+                        # 无权限，设置错误消息并清空 datasource_id，让流程进入 error_handler
+                        error_msg = "您没有访问该数据源的权限，请联系管理员授权。"
+                        logger.warning(f"用户 {user_id} 尝试访问未授权的数据源 {datasource_id}")
+                        state["error_message"] = error_msg
+                        state["datasource_id"] = None  # 清空 datasource_id，让流程进入 error_handler
+                        return state
+                
+                # 有权限，继续执行
+                logger.info(f"用户 {user_id} 有数据源 {datasource_id} 的访问权限")
+                return state
+        except Exception as e:
+            logger.error(f"检查数据源权限失败: {e}", exc_info=True)
+            state["error_message"] = "检查数据源权限时发生错误，请稍后重试。"
+            return state
 
     # 获取用户查询
     user_query = state.get("user_query", "")
@@ -41,11 +77,13 @@ async def datasource_selector(state: AgentState) -> AgentState:
         logger.warning("用户查询为空，无法选择数据源")
         return state
 
-    # 获取所有数据源列表
+    # 获取数据源列表（根据用户权限过滤）
     try:
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
-            datasources = DatasourceService.get_datasource_list(session)
+            # 从state中获取用户ID，如果没有则默认为管理员
+            user_id = state.get("user_id")
+            datasources = DatasourceService.get_datasource_list(session, user_id)
 
             if not datasources:
                 # 典型场景：原对话绑定的数据源已被删除，或当前空间下无可用数据源

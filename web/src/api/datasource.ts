@@ -1,6 +1,7 @@
 /**
  * 数据源相关 API 封装
  */
+import { useUserStore } from '@/store/business/userStore'
 
 /**
  * 获取数据源列表
@@ -255,6 +256,45 @@ export async function sync_datasource_tables(dsId: number | string, tables: any[
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(tables),
+  })
+  return fetch(req)
+}
+
+/**
+ * 获取已授权用户
+ */
+export async function get_authorized_users(datasourceId: number) {
+  const userStore = useUserStore()
+  const token = userStore.getUserToken()
+  const url = new URL(`${location.origin}/sanic/datasource/getAuthorizedUsers/${datasourceId}`)
+  const req = new Request(url, {
+    mode: 'cors',
+    method: 'post',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+  return fetch(req)
+}
+
+/**
+ * 数据源授权
+ */
+export async function authorize_datasource(datasourceId: number, userIds: number[]) {
+  const userStore = useUserStore()
+  const token = userStore.getUserToken()
+  const url = new URL(`${location.origin}/sanic/datasource/authorize`)
+  const req = new Request(url, {
+    mode: 'cors',
+    method: 'post',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      datasource_id: datasourceId,
+      user_ids: userIds,
+    }),
   })
   return fetch(req)
 }

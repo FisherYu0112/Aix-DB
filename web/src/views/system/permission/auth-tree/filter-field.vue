@@ -71,7 +71,7 @@ import {
   NInputGroup,
   NSelect,
 } from 'naive-ui'
-import { computed, inject, onBeforeMount, ref, toRefs, type Ref } from 'vue'
+import { computed, inject, onBeforeMount, watch, nextTick, ref, toRefs, type Ref } from 'vue'
 import { allOptions } from '../options'
 import Trash from '~icons/material-symbols/delete-outline'
 
@@ -154,13 +154,20 @@ const computedFiledList = computed<any[]>(() => {
 
 const dimensions = computed(() => {
   if (!keywords.value) return computedFiledList.value
-  return computedFiledList.value.filter((ele) => ele.field_name.includes(keywords.value))
+  return computedFiledList.value.filter((ele) => {
+    const searchText = keywords.value.toLowerCase()
+    const fieldName = (ele.field_name || '').toLowerCase()
+    const fieldComment = (ele.field_comment || '').toLowerCase()
+    return fieldName.includes(searchText) || fieldComment.includes(searchText)
+  })
 })
 
 const dimensionOptions = computed(() => {
     return dimensions.value.map(ele => ({
-        label: ele.field_name,
-        value: ele.id
+        // 优先使用中文注释（field_comment），如果没有则使用字段名（field_name）
+        label: ele.field_comment || ele.field_name || String(ele.id),
+        // 统一使用字符串类型，确保与 activeNameId 的类型匹配
+        value: String(ele.id)
     }))
 })
 
@@ -169,10 +176,63 @@ onBeforeMount(() => {
   filterListInit()
 })
 
+// 监听 item.field_id 的变化，当编辑时重新初始化
+watch(() => item.value.field_id, (newFieldId) => {
+  if (newFieldId) {
+    nextTick(() => {
+      initNameEnumName()
+    })
+  }
+}, { immediate: true })
+
+// 监听 filedList 的变化，当字段列表加载完成后重新初始化
+watch(() => filedList.value, (newList) => {
+  if (newList && newList.length > 0 && item.value.field_id) {
+    nextTick(() => {
+      initNameEnumName()
+    })
+  }
+}, { immediate: false, deep: false })
+
 const initNameEnumName = () => {
   const { name, enum_value, field_id } = item.value
-  // activeNameId should be the ID
-  activeNameId.value = field_id ? String(field_id) : null
+  
+  // 如果 field_id 存在，尝试匹配并设置 activeNameId
+  if (field_id) {
+    // 统一转换为字符串进行比较和设置
+    const fieldIdStr = String(field_id)
+    
+    // 检查 filedList 是否已加载，并且能找到对应的字段
+    if (filedList.value && Array.isArray(filedList.value) && filedList.value.length > 0) {
+      // 尝试多种方式匹配 field_id（处理数字和字符串类型）
+      const foundField = filedList.value.find(ele => {
+        if (!ele || ele.id === undefined) return false
+        // 支持多种匹配方式：严格相等、字符串相等、数字相等
+        return String(ele.id) === fieldIdStr || 
+               ele.id === field_id || 
+               ele.id === Number(field_id) ||
+               String(ele.id) === String(field_id)
+      })
+      
+      if (foundField) {
+        // 找到匹配的字段，设置 activeNameId（统一使用字符串类型）
+        activeNameId.value = String(foundField.id)
+        // 更新 item.name 为中文注释（如果存在）
+        const chineseName = foundField.field_comment || foundField.field_name
+        if (chineseName && (!item.value.name || item.value.name !== chineseName)) {
+          item.value.name = chineseName
+        }
+      } else {
+        // 如果找不到匹配的字段，仍然设置 activeNameId（可能字段列表还没完全加载或字段已被删除）
+        activeNameId.value = fieldIdStr
+      }
+    } else {
+      // filedList 还没加载，先设置 activeNameId
+      activeNameId.value = fieldIdStr
+    }
+  } else {
+    activeNameId.value = null
+  }
   
   const arr = enum_value && enum_value.trim() ? enum_value.split(',') : []
   if (!name && field_id) {
@@ -193,11 +253,13 @@ const initEnumOptions = () => {
 }
 
 const selectItem = (id: any) => {
-  const selected = dimensions.value.find(ele => ele.id === id)
+  // id 可能是字符串或数字，需要统一处理
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id
+  const selected = dimensions.value.find(ele => ele.id === idNum || String(ele.id) === String(id))
   if (selected) {
       Object.assign(item.value, {
         field_id: selected.id,
-        name: selected.field_name,
+        name: selected.field_comment || selected.field_name, // 优先使用中文注释
         filter_type: 'logic',
         value: '',
         term: '',

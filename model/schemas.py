@@ -284,6 +284,25 @@ class GetNeo4jRelationResponse(BaseResponse):
     data: List[Dict[str, Any]] = Field(description="Neo4j 关系列表")
 
 
+class DatasourceAuthRequest(BaseModel):
+    """数据源授权请求"""
+
+    datasource_id: int = Field(description="数据源ID")
+    user_ids: List[int] = Field(description="用户ID列表")
+
+
+class DatasourceAuthResponse(BaseResponse):
+    """数据源授权响应"""
+
+    data: Dict[str, str] = Field(description="授权结果")
+
+
+class GetAuthorizedUsersResponse(BaseResponse):
+    """获取已授权用户响应"""
+
+    data: List[int] = Field(description="已授权的用户ID列表")
+
+
 # ==================== 用户服务相关模型 ====================
 class LoginRequest(BaseModel):
     """登录请求"""

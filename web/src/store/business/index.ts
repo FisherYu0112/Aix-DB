@@ -78,22 +78,45 @@ export const useBusinessStore = defineStore('business-store', {
       writerOid,
       data,
     ): Promise<{
-        error: number
-        reader: ReadableStreamDefaultReader<string> | null
-        needLogin: boolean
-      }> {
+      error: number
+      reader: ReadableStreamDefaultReader<string> | null
+      needLogin: boolean
+      permissionDenied?: boolean
+      errorMessage?: string
+    }> {
       return new Promise((resolve) => {
         const query_str = data.text
         const file_list = data.file_list
         const qa_type = data.qa_type || this.qa_type
         const datasource_id = data.datasource_id
-        const processResponse = (res) => {
+        const processResponse = async (res) => {
           if (res.status === 401) {
             // 登录失效
             return {
               error: 1,
               reader: null,
               needLogin: true,
+              permissionDenied: false,
+            }
+          } else if (res.status === 403) {
+            // 权限被拒绝
+            try {
+              const errorData = await res.json()
+              return {
+                error: 1,
+                reader: null,
+                needLogin: false,
+                permissionDenied: true,
+                errorMessage: errorData.msg || '您没有访问该数据源的权限，请联系管理员授权。',
+              }
+            } catch (e) {
+              return {
+                error: 1,
+                reader: null,
+                needLogin: false,
+                permissionDenied: true,
+                errorMessage: '您没有访问该数据源的权限，请联系管理员授权。',
+              }
             }
           } else if (res.status === 200) {
             const reader = res.body
@@ -156,25 +179,28 @@ export const useBusinessStore = defineStore('business-store', {
               error: 0,
               reader,
               needLogin: false,
+              permissionDenied: false,
             }
           } else {
             return {
               error: 1,
               reader: null,
               needLogin: false,
+              permissionDenied: false,
             }
           }
         }
 
         // 调用后端接口拿大模型结果
         GlobalAPI.createOllama3Stylized(query_str, qa_type, uuid, chat_id, file_list, datasource_id)
-          .then((res) => resolve(processResponse(res)))
+          .then(async (res) => resolve(await processResponse(res)))
           .catch((err) => {
             console.error('Request failed:', err)
             resolve({
               error: 1,
               reader: null,
               needLogin: false,
+              permissionDenied: false,
             })
           })
       })

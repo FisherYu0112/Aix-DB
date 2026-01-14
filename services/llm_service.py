@@ -93,6 +93,7 @@ class LLMRequest:
                 await common_agent.run_agent(query, res, chat_id, uuid_str, token, file_list)
                 return None
             elif qa_type == IntentEnum.DATABASE_QA.value[0]:
+                # 权限检查已在接口层完成，这里直接调用 agent
                 await sql_agent.run_agent(query, res, chat_id, uuid_str, token, datasource_id)
                 return None
             elif qa_type == IntentEnum.FILEDATA_QA.value[0]:

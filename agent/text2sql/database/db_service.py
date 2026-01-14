@@ -206,12 +206,14 @@ class DatabaseService:
         获取数据库中所有表的结构信息（带权限过滤和缓存）。
         
         Args:
-            user_id: 用户ID，用于权限过滤（如果为1或None，不应用权限过滤）
+            user_id: 用户ID，用于权限过滤（管理员不应用权限过滤）
             use_cache: 是否使用缓存
             
         Returns:
             表信息字典
         """
+        from common.permission_util import is_admin
+        
         # 检查缓存
         cache_key = (self._datasource_id or 0, user_id)
         if use_cache:
@@ -229,7 +231,7 @@ class DatabaseService:
 
         # 获取列权限配置（集成完整的权限系统）
         column_permissions = {}
-        if user_id and user_id != 1 and self._datasource_id:
+        if user_id and not is_admin(user_id) and self._datasource_id:
             try:
                 with db_pool.get_session() as session:
                     # 获取该数据源下所有表
@@ -941,18 +943,28 @@ class DatabaseService:
     def execute_sql(self, state: AgentState) -> AgentState:
         """
         执行生成的 SQL 语句。
+        优先使用权限过滤后的SQL（filtered_sql），如果没有则使用原始生成的SQL（generated_sql）。
         """
-        generated_sql = state.get("generated_sql", "").strip()
-        if not generated_sql:
+        # 优先使用权限过滤后的SQL，如果没有则使用原始生成的SQL
+        sql_to_execute = state.get("filtered_sql") or state.get("generated_sql", "")
+        sql_to_execute = sql_to_execute.strip() if sql_to_execute else ""
+        
+        if not sql_to_execute:
             error_msg = "SQL 为空，无法执行"
             logger.warning(error_msg)
             state["execution_result"] = ExecutionResult(success=False, error=error_msg)
             return state
 
         logger.info("▶️ 执行 SQL 语句")
+        # 记录使用的SQL类型（用于调试）
+        if state.get("filtered_sql"):
+            logger.info("使用权限过滤后的SQL执行")
+        else:
+            logger.info("使用原始生成的SQL执行")
+        
         try:
             with self._engine.connect() as connection:
-                result = connection.execute(text(generated_sql))
+                result = connection.execute(text(sql_to_execute))
                 result_data = result.fetchall()
                 columns = result.keys()
                 frame = pd.DataFrame(result_data, columns=columns)
