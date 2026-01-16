@@ -41,6 +41,11 @@ const historyPageSize = 20
 const hasMoreHistory = computed(
   () => historyPage.value <= historyTotalPages.value,
 )
+// 根据分页信息判断是否需要强制显示滚动条
+// 当总页数大于1时，即使内容不够高也要显示滚动条，以便触发滚动加载
+const shouldForceScrollbar = computed(
+  () => historyTotalPages.value > 1,
+)
 
 // 对话历史分页状态（点击某个对话记录时使用）
 const conversationHistoryPage = ref(1)
@@ -106,9 +111,30 @@ function newChat() {
 
   // 重置查看历史消息标识
   isView.value = false
+  
+  // 重置内容加载状态
+  contentLoadingStates.value = []
+  currentRenderIndex.value = 0
 
-  // 新增：生成当前问答类型的新uuid
-  uuids.value[qa_type.value] = uuidv4()
+  // 重置对话类型为默认值（智能问答）
+  qa_type.value = 'COMMON_QA'
+  businessStore.update_qa_type('COMMON_QA')
+  
+  // 清空选中的数据源
+  selectedDatasource.value = null
+  
+  // 清空文件列表
+  businessStore.clear_file_list()
+  
+  // 清空 writerList，避免显示旧对话类型的数据
+  businessStore.clearWriterList()
+  
+  // 清空记录ID
+  businessStore.clear_record_id()
+  
+  // 重置所有问答类型的uuid
+  uuids.value = {}
+  uuids.value['COMMON_QA'] = uuidv4()
 }
 
 /**
@@ -470,6 +496,10 @@ const handleCreateStylized = async (
 
     // 清空文件上传列表
     pendingUploadFileInfoList.value = []
+    
+    // 清空 writerList，确保不会显示旧对话类型的数据
+    businessStore.clearWriterList()
+    
     // businessStore.clear_file_list()
   }
 
@@ -906,6 +936,8 @@ async function loadHistoryList(
     if (meta) {
       historyTotalPages.value = meta.totalPages
       historyPage.value = meta.currentPage + 1
+      // 确保当有多页数据时，容器可以滚动触发加载
+      ensureScrollable()
     }
   } catch (error) {
     console.error('加载历史对话失败:', error)
@@ -940,6 +972,27 @@ const handleHistoryScroll = () => {
   if (isNearBottom) {
     loadHistoryList()
   }
+}
+
+// 确保当有多页数据时，容器可以滚动触发加载
+const ensureScrollable = () => {
+  if (!shouldForceScrollbar.value) {
+    return
+  }
+  nextTick(() => {
+    const el = historyScrollRef.value as unknown as HTMLElement
+    if (!el || !hasMoreHistory.value) {
+      return
+    }
+    // 检查内容高度是否小于等于容器高度
+    // 如果内容高度不足以滚动，需要添加占位元素来确保可以滚动
+    // 占位元素已经在模板中实现，这里主要是确保逻辑正确
+    const needsPadding = el.scrollHeight <= el.clientHeight
+    if (needsPadding) {
+      // 模板中的占位元素会确保可以滚动
+      // 如果需要，可以在这里动态调整占位元素的高度
+    }
+  })
 }
 
 // 首次进入加载历史列表
@@ -1032,6 +1085,16 @@ const pendingUploadFileInfoList = ref([])
 
 // 新增：处理从DefaultPage来的提交
 const handleSubmitFromDefaultPage = (payload: { text: string, mode: string, datasource_id?: number }) => {
+  // 先清空之前的对话数据，确保切换类型时不会显示旧数据
+  conversationItems.value = []
+  
+  // 清空 writerList，避免显示旧对话类型的数据
+  businessStore.clearWriterList()
+  
+  // 清空记录ID
+  businessStore.clear_record_id()
+  
+  // 切换对话类型
   onAqtiveChange(payload.mode, '') // Switch mode
   inputTextString.value = payload.text // Set text
   
@@ -1040,6 +1103,11 @@ const handleSubmitFromDefaultPage = (payload: { text: string, mode: string, data
      if (ds) {
          selectedDatasource.value = ds
      }
+  } else {
+    // 如果不是数据问答，清空选中的数据源
+    if (payload.mode !== 'DATABASE_QA') {
+      selectedDatasource.value = null
+    }
   }
 
   // Pass a copy of the file list to avoid it being cleared if store is cleared
@@ -1062,9 +1130,10 @@ const currentQaOption = computed(() => {
 const showModeSelector = ref(false)
 
 const clearMode = () => {
-  // Switch to selection mode
-  showModeSelector.value = true
-  selectedDatasource.value = null
+  // 点击删除图标后，设置成新对话并显示默认页面
+  // newChat() 已经会重置 qa_type 和 selectedDatasource，所以这里只需要调用它
+  newChat()
+  showModeSelector.value = false
 }
 
 const selectMode = (mode: string) => {
@@ -1324,7 +1393,7 @@ const handleHistoryClick = async (item: any) => {
         bordered
         class="qianwen-sidebar"
       >
-        <div class="sidebar-container flex flex-col h-full bg-[#F6F6F8]">
+        <div class="sidebar-container flex flex-col h-full bg-[#fcfcfc]">
           <!-- Header: Logo & Icons -->
           <div class="sidebar-header px-6 py-6 flex justify-between items-center">
             <div
@@ -1393,7 +1462,8 @@ const handleHistoryClick = async (item: any) => {
           <!-- History List -->
           <div
             ref="historyScrollRef"
-            class="flex-1 overflow-y-auto custom-scrollbar px-4"
+            class="flex-1 custom-scrollbar px-4"
+            :class="shouldForceScrollbar ? 'overflow-y-scroll' : 'overflow-y-auto'"
             @scroll.passive="handleHistoryScroll"
           >
             <div
@@ -1428,10 +1498,17 @@ const handleHistoryClick = async (item: any) => {
             >
               加载更多...
             </div>
+            <!-- 占位元素：当有多页数据时，确保可以滚动触发加载 -->
+            <!-- 当总页数大于1且有更多数据时，添加一个占位元素确保可以滚动 -->
+            <div
+              v-if="shouldForceScrollbar && hasMoreHistory && !isLoadingMoreHistory"
+              class="scroll-trigger-placeholder"
+              style="height: 50px; min-height: 50px;"
+            ></div>
           </div>
 
           <!-- Sidebar Footer -->
-          <div class="sidebar-footer px-6 py-5 flex items-center justify-between bg-[#F6F6F8] mt-auto">
+          <div class="sidebar-footer px-6 py-5 flex items-center justify-between bg-[#fcfcfc] mt-auto">
             <SideBar
               mode="avatar"
               theme="light"
@@ -1992,8 +2069,15 @@ const handleHistoryClick = async (item: any) => {
   overflow-y: auto;
 }
 
+/* 当需要强制显示滚动条时，使用 scroll 而非 auto，确保滚动条始终可见 */
+.custom-scrollbar.overflow-y-scroll {
+  overflow-y: scroll;
+  /* 当内容不足以滚动时，添加最小高度以确保可以触发滚动事件 */
+  min-height: 0;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -2001,12 +2085,14 @@ const handleHistoryClick = async (item: any) => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e5e7eb;
-  border-radius: 4px;
+  background: #d4d4d8;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #d1d5db;
+  background: #a1a1aa;
 }
 
 /* Top Header Styles */
@@ -2272,8 +2358,8 @@ const handleHistoryClick = async (item: any) => {
 /* 滚动条整体部分 */
 
 ::-webkit-scrollbar {
-  width: 4px; /* 竖向滚动条宽度 */
-  height: 4px; /* 横向滚动条高度 */
+  width: 6px; /* 竖向滚动条宽度 */
+  height: 6px; /* 横向滚动条高度 */
 }
 
 /* 滚动条的轨道 */
@@ -2286,13 +2372,15 @@ const handleHistoryClick = async (item: any) => {
 
 ::-webkit-scrollbar-thumb {
   background: #cac9f9; /* 滑块颜色 */
-  border-radius: 10px; /* 滑块圆角 */
+  border-radius: 6px; /* 滑块圆角 */
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
 
 /* 滚动条的滑块在悬停状态下的样式 */
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #cac9f9; /* 悬停时滑块颜色 */
+  background: #a8a4f0; /* 悬停时滑块颜色 */
 }
 
 :deep(.custom-table .n-data-table-thead) {
@@ -2436,7 +2524,7 @@ const handleHistoryClick = async (item: any) => {
 /* 隐藏滚动条轨道 */
 
 .scrollable-table-container::-webkit-scrollbar {
-  width: 5px; /* 滚动条宽度 */
+  width: 6px; /* 滚动条宽度 */
 }
 
 .scrollable-table-container::-webkit-scrollbar-track {
@@ -2444,8 +2532,14 @@ const handleHistoryClick = async (item: any) => {
 }
 
 .scrollable-table-container::-webkit-scrollbar-thumb {
-  background-color: #e8eaf3; /* 滚动条颜色 */
-  border-radius: 4px; /* 滚动条圆角 */
+  background-color: #d1d5db; /* 滚动条颜色 */
+  border-radius: 6px; /* 滚动条圆角 */
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollable-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af; /* 悬停时滚动条颜色 */
 }
 
 /* 一键到底部按钮样式，底部居中显示 */
