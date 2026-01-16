@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import time
+import uuid
 from typing import Dict, Any, Optional, Union
 
 from langgraph.graph.state import CompiledStateGraph
@@ -14,6 +16,21 @@ from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 
 logger = logging.getLogger(__name__)
+
+# 步骤名称映射（中文）
+STEP_NAME_MAP = {
+    "schema_inspector": "表结构检索...",
+    "table_relationship": "表关系分析...",
+    "sql_generator": "SQL生成...",
+    "permission_filter": "权限过滤...",
+    "sql_executor": "SQL执行...",
+    "chart_generator": "图表配置...",
+    "summarize": "结果总结...",
+    "data_render": "数据渲染...",
+    "question_recommender": "推荐问题...",
+    "datasource_selector": "数据源选择...",
+    "error_handler": "错误处理",
+}
 
 
 class Text2SqlAgent:
@@ -28,6 +45,10 @@ class Text2SqlAgent:
         self.show_thinking_process = os.getenv("SHOW_THINKING_PROCESS", "true").lower() == "true"
         # 是否启用链路追踪
         self.ENABLE_TRACING = os.getenv("LANGFUSE_TRACING_ENABLED", "true").lower() == "true"
+        # 存储步骤开始时间（用于计算耗时）
+        self.step_start_times = {}
+        # 存储步骤的 progressId
+        self.step_progress_ids = {}
 
     async def run_agent(
         self,
@@ -218,6 +239,21 @@ class Text2SqlAgent:
         # 处理具体步骤内容
         if step_value:
             await self._process_step_content(response, langgraph_step, step_value, t02_answer_data, t04_answer_data)
+            
+            # 步骤内容处理完成后，发送完成信息（如果是最后一个步骤，确保发送完成信息）
+            if langgraph_step in self.step_progress_ids:
+                progress_id = self.step_progress_ids.get(langgraph_step)
+                if progress_id:
+                    step_name_cn = STEP_NAME_MAP.get(langgraph_step, langgraph_step)
+                    await self._send_step_progress(
+                        response=response,
+                        step=langgraph_step,
+                        step_name=step_name_cn,
+                        status="complete",
+                        progress_id=progress_id,
+                    )
+                    # 清理已完成的步骤 progressId
+                    del self.step_progress_ids[langgraph_step]
 
         return current_step, t02_answer_data
 
@@ -231,6 +267,23 @@ class Text2SqlAgent:
         """
         处理步骤变更
         """
+        # 记录新步骤开始时间（用于计算耗时）
+        if new_step and new_step not in self.step_start_times:
+            self.step_start_times[new_step] = time.perf_counter()
+            logger.debug(f"步骤 {new_step} 开始")
+            
+            # 生成新的 progressId 并发送步骤开始信息
+            progress_id = str(uuid.uuid4())
+            self.step_progress_ids[new_step] = progress_id
+            step_name_cn = STEP_NAME_MAP.get(new_step, new_step)
+            await self._send_step_progress(
+                response=response,
+                step=new_step,
+                step_name=step_name_cn,
+                status="start",
+                progress_id=progress_id,
+            )
+        
         if self.show_thinking_process:
             if new_step != current_step:
                 # 如果之前有打开的步骤，先关闭它
@@ -281,6 +334,15 @@ class Text2SqlAgent:
         """
         处理各个步骤的内容
         """
+        # 计算步骤耗时（用于日志记录）
+        elapsed_time = None
+        if step_name in self.step_start_times:
+            start_time = self.step_start_times[step_name]
+            end_time = time.perf_counter()
+            elapsed_time = end_time - start_time
+            logger.debug(f"步骤 {step_name} 耗时: {elapsed_time:.3f}秒")
+            del self.step_start_times[step_name]
+        
         content_map = {
             # 数据源异常节点：仅输出友好的错误提示，不再继续后续步骤
             "error_handler": lambda: step_value.get(
@@ -528,6 +590,36 @@ class Text2SqlAgent:
         
         tables_text = "\n".join(table_lines)
         return f"检索到 {table_count} 张表：\n{tables_text}"
+
+    @staticmethod
+    async def _send_step_progress(
+        response,
+        step: str,
+        step_name: str,
+        status: str,
+        progress_id: str,
+    ) -> None:
+        """
+        发送步骤进度信息
+        :param response: 响应对象
+        :param step: 步骤标识（英文）
+        :param step_name: 步骤名称（中文）
+        :param status: 状态（"start" 或 "complete"）
+        :param progress_id: 进度ID（唯一标识）
+        """
+        if response:
+            progress_data = {
+                "type": "step_progress",
+                "step": step,
+                "stepName": step_name,
+                "status": status,
+                "progressId": progress_id,
+            }
+            formatted_message = {
+                "data": progress_data,
+                "dataType": DataTypeEnum.STEP_PROGRESS.value[0],
+            }
+            await response.write("data:" + json.dumps(formatted_message, ensure_ascii=False) + "\n\n")
 
     @staticmethod
     async def _send_response(

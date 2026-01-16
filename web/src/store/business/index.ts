@@ -135,9 +135,9 @@ export const useBusinessStore = defineStore('business-store', {
                 new TransformStream({
                   transform: (chunk, controller) => {
                     try {
-                      const jsonChunk = JSON.parse(
-                        chunk.split('data:')[1],
-                      )
+                      const chunkData = chunk.split('data:')[1]?.trim()
+                      if (!chunkData) return
+                      const jsonChunk = JSON.parse(chunkData)
                       if (jsonChunk.task_id) {
                         // 调用已有的更新方法来更新 task_id
                         this.update_task_id(
@@ -171,17 +171,21 @@ export const useBusinessStore = defineStore('business-store', {
                           // 处理record_id，存储到store中以便后续使用
                           if (jsonChunk.data && jsonChunk.data.record_id) {
                             this.record_id = jsonChunk.data.record_id
-                            console.log('Received record_id from stream:', jsonChunk.data.record_id)
                           }
                           break
                         case 't14':
                           // 处理步骤进度信息，直接传递给前端组件显示
-                          controller.enqueue(
-                            JSON.stringify({
-                              type: 'step_progress',
-                              ...jsonChunk.data,
-                            }),
-                          )
+                          if (jsonChunk.data && jsonChunk.data.type === 'step_progress') {
+                            controller.enqueue(
+                              JSON.stringify({
+                                type: 'step_progress',
+                                step: jsonChunk.data.step,
+                                stepName: jsonChunk.data.stepName,
+                                status: jsonChunk.data.status,
+                                progressId: jsonChunk.data.progressId,
+                              }),
+                            )
+                          }
                           break
                         default:
                                                 // 可以在这里处理其他类型的 dataType

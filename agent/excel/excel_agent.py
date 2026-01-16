@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import traceback
+import uuid
 from typing import Optional, Dict, Any, Union
 
 from langgraph.graph.state import CompiledStateGraph
@@ -21,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 # 步骤名称映射（中文）
 STEP_NAME_MAP = {
-    "excel_parsing": "文件解析",
-    "sql_generator": "SQL生成",
-    "sql_executor": "SQL执行",
-    "chart_generator": "图表配置",
-    "summarize": "结果总结",
-    "data_render": "数据渲染",
-    "data_render_apache": "数据渲染",
-    "question_recommender": "推荐问题",
+    "excel_parsing": "文件解析...",
+    "sql_generator": "SQL生成...",
+    "sql_executor": "SQL执行...",
+    "chart_generator": "图表配置...",
+    "summarize": "结果总结...",
+    "data_render": "数据渲染...",
+    "data_render_apache": "数据渲染...",
+    "question_recommender": "推荐问题...",
 }
 
 
@@ -47,6 +48,8 @@ class ExcelAgent:
         self.ENABLE_TRACING = os.getenv("LANGFUSE_TRACING_ENABLED", "true").lower() == "true"
         # 存储步骤开始时间（用于计算耗时）
         self.step_start_times = {}
+        # 存储步骤的 progressId
+        self.step_progress_ids = {}
 
     async def run_excel_agent(
         self,
@@ -212,7 +215,7 @@ class ExcelAgent:
 
         langgraph_step, step_value = next(iter(chunk_dict.items()))
 
-        # 处理步骤变更
+        # 处理步骤变更（发送前一个步骤的完成信息和新步骤的开始信息）
         current_step, t02_answer_data = await self._handle_step_change(
             response, current_step, langgraph_step, t02_answer_data
         )
@@ -222,6 +225,21 @@ class ExcelAgent:
             summarize_content, sql_statement = await self._process_step_content(
                 response, langgraph_step, step_value, t02_answer_data, t04_answer_data, summarize_content, sql_statement
             )
+            
+            # 步骤内容处理完成后，发送完成信息（如果是最后一个步骤，确保发送完成信息）
+            if langgraph_step in self.step_progress_ids:
+                progress_id = self.step_progress_ids.get(langgraph_step)
+                if progress_id:
+                    step_name_cn = STEP_NAME_MAP.get(langgraph_step, langgraph_step)
+                    await self._send_step_progress(
+                        response=response,
+                        step=langgraph_step,
+                        step_name=step_name_cn,
+                        status="complete",
+                        progress_id=progress_id,
+                    )
+                    # 清理已完成的步骤 progressId
+                    del self.step_progress_ids[langgraph_step]
 
         return current_step, t02_answer_data, summarize_content, sql_statement
 
@@ -239,6 +257,18 @@ class ExcelAgent:
         if new_step and new_step not in self.step_start_times:
             self.step_start_times[new_step] = time.perf_counter()
             logger.debug(f"步骤 {new_step} 开始")
+            
+            # 生成新的 progressId 并发送步骤开始信息
+            progress_id = str(uuid.uuid4())
+            self.step_progress_ids[new_step] = progress_id
+            step_name_cn = STEP_NAME_MAP.get(new_step, new_step)
+            await self._send_step_progress(
+                response=response,
+                step=new_step,
+                step_name=step_name_cn,
+                status="start",
+                progress_id=progress_id,
+            )
         
         # 只输出 summarize 到前端，不显示思考过程的 details 标签
         # 对于需要显示的步骤，确保之前的步骤已关闭
@@ -450,6 +480,36 @@ class ExcelAgent:
         separator = "\n\n---\n\n"
         
         return formatted + separator
+
+    @staticmethod
+    async def _send_step_progress(
+        response,
+        step: str,
+        step_name: str,
+        status: str,
+        progress_id: str,
+    ) -> None:
+        """
+        发送步骤进度信息
+        :param response: 响应对象
+        :param step: 步骤标识（英文）
+        :param step_name: 步骤名称（中文）
+        :param status: 状态（"start" 或 "complete"）
+        :param progress_id: 进度ID（唯一标识）
+        """
+        if response:
+            progress_data = {
+                "type": "step_progress",
+                "step": step,
+                "stepName": step_name,
+                "status": status,
+                "progressId": progress_id,
+            }
+            formatted_message = {
+                "data": progress_data,
+                "dataType": DataTypeEnum.STEP_PROGRESS.value[0],
+            }
+            await response.write("data:" + json.dumps(formatted_message, ensure_ascii=False) + "\n\n")
 
     @staticmethod
     async def _send_response(

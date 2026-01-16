@@ -34,6 +34,7 @@ const emit = defineEmits([
   'belittleFeedback',
   'suggested',
   'progress-display-change',
+  'step-progress',
 ])
 
 const { copy, copyDuration } = useClipText()
@@ -221,10 +222,15 @@ const readTextStream = async () => {
         break
       }
 
-      // 不再处理进度信息（已移除 StepProgress 组件）
+      // 处理步骤进度信息
+      if (stream.progress) {
+        emit('step-progress', stream.progress)
+      }
 
       // 每条消息换行显示
-      textBuffer.value += stream.content
+      if (stream.content) {
+        textBuffer.value += stream.content
+      }
 
       if (typingAnimationFrame === null) {
         showText()

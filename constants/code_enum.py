@@ -64,6 +64,8 @@ class DataTypeEnum(Enum):
 
     RECORD_ID = ("t12", "记录ID,用于查询SQL等操作")
 
+    STEP_PROGRESS = ("t14", "步骤进度信息")
+
     STREAM_END = ("t99", "流式推流结束")
 
 

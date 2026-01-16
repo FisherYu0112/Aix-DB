@@ -264,6 +264,24 @@ const onFailedReader = (index: number) => {
 const onCompletedReader = (index: number) => {
   if (conversationItems.value[index]) {
     stylizingLoading.value = false
+    // 隐藏加载动画（找到对应的 visibleIndex）
+    const item = conversationItems.value[index]
+    const visibleIndex = visibleConversationItems.value.findIndex(vi => vi.uuid === item.uuid)
+    if (visibleIndex >= 0) {
+      // 设置所有对应同一个 originalIndex 的 visibleIndex 的加载状态为 false
+      const assistantVisibleIndexes: number[] = [visibleIndex]
+      for (let i = 0; i < visibleConversationItems.value.length; i++) {
+        const vi = visibleConversationItems.value[i]
+        if (vi && vi.uuid === item.uuid && i !== visibleIndex) {
+          assistantVisibleIndexes.push(i)
+        }
+      }
+      assistantVisibleIndexes.forEach(vi => {
+        if (contentLoadingStates.value[vi] !== undefined) {
+          contentLoadingStates.value[vi] = false
+        }
+      })
+    }
     setTimeout(() => {
       if (refInputTextString.value) {
         refInputTextString.value.select()
@@ -375,16 +393,153 @@ const visibleConversationItems = computed(() => {
   }
 })
 // 这里控制内容加载状态
-const contentLoadingStates = ref(
-  visibleConversationItems.value.map(() => false),
+// 使用函数确保每次访问时都能获取最新的长度
+const contentLoadingStates = ref<boolean[]>([])
+
+// 确保 contentLoadingStates 数组长度与 visibleConversationItems 同步
+watch(
+  () => visibleConversationItems.value.length,
+  (newLength, oldLength) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:400',message:'visibleConversationItems length changed',data:{oldLength,newLength,currentContentLoadingStatesLength:contentLoadingStates.value.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    // 当 visibleConversationItems 长度变化时，扩展 contentLoadingStates
+    while (contentLoadingStates.value.length < newLength) {
+      contentLoadingStates.value.push(false)
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:407',message:'after extending contentLoadingStates',data:{newLength,contentLoadingStatesLength:contentLoadingStates.value.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+  },
+  { immediate: true }
 )
 
 // 控制每个对话项的进度显示状态（用于隐藏 bars-scale）
 const progressDisplayStates = ref<Record<number, boolean>>({})
 
 // 处理进度显示状态变化
+// 注意：这个事件用于隐藏旧的 bars-scale loading，但现在我们使用 SVG 图标
+// 只有当内容真正开始渲染时（hasProgress=true），才隐藏 SVG
+// 但是，如果后端推送了步骤信息，我们不应该隐藏 SVG，而是继续显示 SVG 和步骤信息
 const onProgressDisplayChange = (index: number, hasProgress: boolean) => {
-  progressDisplayStates.value[index] = hasProgress
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:421',message:'onProgressDisplayChange',data:{index,hasProgress,previousValue:progressDisplayStates.value[index],contentLoadingState:contentLoadingStates.value[index],hasStepProgress:!!getStepProgressForIndex(index)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+  // #endregion
+  
+  // 如果后端推送了步骤信息，不要隐藏 SVG（继续显示 SVG 和步骤信息）
+  // 只有当没有步骤信息且内容开始渲染时，才隐藏 SVG
+  const hasStepProgress = !!getStepProgressForIndex(index)
+  if (hasStepProgress) {
+    // 有步骤信息时，不隐藏 SVG，继续显示 SVG 和步骤信息
+    progressDisplayStates.value[index] = false
+  } else {
+    // 没有步骤信息时，按原逻辑处理
+    progressDisplayStates.value[index] = hasProgress
+  }
+}
+
+// 存储每个对话项的步骤进度信息（使用 conversationItems 的索引作为键）
+const stepProgressStates = ref<Record<number, { stepName: string; status: string; progressId: string }>>({})
+
+// 监控 contentLoadingStates 和 progressDisplayStates 的变化，用于调试
+watch(
+  () => visibleConversationItems.value.map((item, idx) => ({
+    index: idx,
+    uuid: item.uuid,
+    role: item.role,
+    contentLoading: contentLoadingStates.value[idx],
+    progressDisplay: progressDisplayStates.value[idx],
+    condition: contentLoadingStates.value[idx] && !progressDisplayStates.value[idx],
+  })),
+  (newStates) => {
+    // #region agent log
+    newStates.forEach(state => {
+      if (state.role === 'assistant') {
+        fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:427',message:'assistant state changed',data:state,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      }
+    });
+    // #endregion
+  },
+  { deep: true }
+)
+
+// 计算属性：根据 visibleConversationItems 的索引获取对应的步骤进度信息
+const getStepProgressForIndex = (visibleIndex: number) => {
+  // 获取 visibleConversationItems 中对应索引的 item
+  const item = visibleConversationItems.value[visibleIndex]
+  if (!item) return undefined
+  
+  // 找到该 item 在 conversationItems 中的原始索引
+  const originalIndex = conversationItems.value.findIndex(ci => ci.uuid === item.uuid)
+  
+  if (originalIndex >= 0) {
+    return stepProgressStates.value[originalIndex]
+  }
+  return undefined
+}
+
+// 处理步骤进度信息（接收的是 visibleConversationItems 的索引）
+const onStepProgress = (visibleIndex: number, progress: any) => {
+  // 获取 visibleConversationItems 中对应索引的 item，找到其在 conversationItems 中的原始索引
+  const item = visibleConversationItems.value[visibleIndex]
+  if (!item) {
+    return
+  }
+  
+  const originalIndex = conversationItems.value.findIndex(ci => ci.uuid === item.uuid)
+  if (originalIndex < 0) {
+    return
+  }
+  
+  if (progress && progress.type === 'step_progress' && progress.stepName && progress.progressId) {
+    // 只有当状态为 start 时才显示/替换步骤信息
+    // complete 状态不做任何操作，等待下一个步骤的 start 来替换
+    if (progress.status === 'start') {
+      // 确保加载状态为 true（使用 visibleIndex，因为 contentLoadingStates 是基于 visibleConversationItems 的）
+      // 确保数组长度足够
+      while (contentLoadingStates.value.length <= visibleIndex) {
+        contentLoadingStates.value.push(false)
+      }
+      // 同时设置 visibleIndex 和 originalIndex 对应的 visibleIndex（如果有的话）
+      // 因为同一个 assistant 消息可能在 visibleConversationItems 中有不同的索引
+      const assistantVisibleIndexes: number[] = [visibleIndex]
+      // 查找所有对应同一个 originalIndex 的 visibleIndex
+      for (let i = 0; i < visibleConversationItems.value.length; i++) {
+        const vi = visibleConversationItems.value[i]
+        if (vi && vi.uuid === item.uuid && i !== visibleIndex) {
+          assistantVisibleIndexes.push(i)
+        }
+      }
+      
+      // 为所有相关的 visibleIndex 设置 contentLoadingStates
+      assistantVisibleIndexes.forEach(vi => {
+        while (contentLoadingStates.value.length <= vi) {
+          contentLoadingStates.value.push(false)
+        }
+        if (!contentLoadingStates.value[vi]) {
+          contentLoadingStates.value[vi] = true
+        }
+        // 确保 progressDisplayStates 为 false（显式设置，即使之前是 undefined）
+        progressDisplayStates.value[vi] = false
+      })
+      
+      // 使用原始索引存储步骤状态（直接替换之前的步骤信息）
+      stepProgressStates.value = {
+        ...stepProgressStates.value,
+        [originalIndex]: {
+          stepName: progress.stepName,
+          status: progress.status,
+          progressId: progress.progressId,
+        }
+      }
+      
+      // 使用 nextTick 确保 DOM 更新
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
+    // complete 状态不做任何操作，步骤信息会一直显示直到下一个步骤的 start 来替换
+  }
 }
 
 
@@ -655,6 +810,46 @@ const handleCreateStylized = async (
     const assistantIndex = conversationItems.value.length - 1
     currentRenderIndex.value = assistantIndex
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:767',message:'assistant message added',data:{assistantIndex,uuid:uuid_str,conversationItemsLength:conversationItems.value.length,currentRenderIndex:currentRenderIndex.value,visibleItemsLength:visibleConversationItems.value.length,contentLoadingStatesLength:contentLoadingStates.value.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
+    // 确保 SVG 加载图标显示（所有问答类型默认都显示）
+    // 使用 nextTick 等待 computed 更新
+    nextTick(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:771',message:'nextTick after assistant added',data:{assistantIndex,uuid:uuid_str,visibleItemsLength:visibleConversationItems.value.length,visibleItemsUuids:visibleConversationItems.value.map(v=>v.uuid),contentLoadingStatesLength:contentLoadingStates.value.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      // visibleConversationItems 是 computed，现在已经更新了
+      // 找到新添加的 assistant 消息在 visibleConversationItems 中的索引
+      // 必须同时匹配 uuid 和 role === 'assistant'，因为用户消息和 assistant 消息可能有相同的 uuid
+      const visibleIndex = visibleConversationItems.value.findIndex(vi => vi.uuid === uuid_str && vi.role === 'assistant')
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:788',message:'found visibleIndex',data:{visibleIndex,assistantIndex,uuid:uuid_str,visibleItemsLength:visibleConversationItems.value.length,visibleItems:visibleConversationItems.value.map((v,i)=>({index:i,uuid:v.uuid,role:v.role}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      if (visibleIndex >= 0) {
+        // 确保数组长度足够
+        while (contentLoadingStates.value.length <= visibleIndex) {
+          contentLoadingStates.value.push(false)
+        }
+        // 设置加载状态为 true，显示 SVG 图标
+        contentLoadingStates.value[visibleIndex] = true
+        // 确保 progressDisplayStates 为 false，这样 SVG 才会显示
+        progressDisplayStates.value[visibleIndex] = false
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:782',message:'set loading states',data:{visibleIndex,contentLoadingState:contentLoadingStates.value[visibleIndex],progressDisplayState:progressDisplayStates.value[visibleIndex],contentLoadingStatesLength:contentLoadingStates.value.length,allContentLoadingStates:contentLoadingStates.value.map((v,i)=>`${i}:${v}`).slice(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bf011677-871d-4e99-b2e7-1188661bef28',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.vue:788',message:'visibleIndex not found',data:{assistantIndex,uuid:uuid_str,visibleItemsLength:visibleConversationItems.value.length,visibleItemsUuids:visibleConversationItems.value.map(v=>v.uuid)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+      }
+    })
+
     // 监听 writerList 变化，将数据保存到对应的对话项中
     // 注意：不要过早停止 watcher，因为推荐问题可能在图表数据之后到达
     const stopWatcher = watch(
@@ -693,7 +888,6 @@ const handleCreateStylized = async (
           // 更新对应的 conversationItem 的 record_id
           if (conversationItems.value[assistantIndex].role === 'assistant') {
             conversationItems.value[assistantIndex].record_id = newRecordId
-            console.log('Updated record_id for conversationItem:', newRecordId, assistantIndex)
           }
           // 更新完成后停止监听
           stopRecordIdWatcher()
@@ -1707,29 +1901,103 @@ const handleHistoryClick = async (item: any) => {
                       :file="file"
                     />
                   </div>
-
-                  <!-- 加载动画：紧跟在消息下方，但对齐到左边 -->
-                  <!-- 当进度组件显示时，隐藏 bars-scale -->
-                  <div
-                    v-if="contentLoadingStates[index] && !progressDisplayStates[index]"
-                    class="i-svg-spinners:bars-scale"
-                    :style="{
-                      'width': `24px`,
-                      'height': `24px`,
-                      'color': `#b1adf3`,
-                      'border-left-color': `#b1adf3`,
-                      'animation': `spin 1s linear infinite`,
-                      'margin-top': '10px',
-                      'align-self': 'flex-start', // 让此元素在交叉轴（水平轴）上靠左对齐
-                      'margin-left': '0', // 与上面的消息保持一致的缩进
-                    }"
-                  ></div>
                 </div>
 
                 <div
                   v-if="item.role === 'assistant'"
                   class="max-w-[890px] w-full mx-auto"
                 >
+                  <!-- Assistant 消息的加载动画和步骤信息 -->
+                  <div
+                    v-if="contentLoadingStates[index] && !progressDisplayStates[index]"
+                    class="flex items-center gap-2 mb-2"
+                    :data-debug-svg="JSON.stringify({index,itemRole:item.role,itemUuid:item.uuid,contentLoadingState:contentLoadingStates[index],progressDisplayState:progressDisplayStates[index],conditionResult:contentLoadingStates[index] && !progressDisplayStates[index],contentLoadingStatesLength:contentLoadingStates.length})"
+                  >
+                    <!-- 星星动画 -->
+                    <div
+                      class="star-spinner"
+                      :style="{
+                        'width': `24px`,
+                        'height': `24px`,
+                      }"
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <!-- 中心星星 -->
+                        <g class="star-group star-center">
+                          <path
+                            d="M12 2L14.09 8.26L20 9.27L15 13.14L16.18 19.02L12 15.77L7.82 19.02L9 13.14L4 9.27L9.91 8.26L12 2Z"
+                            fill="#b1adf3"
+                            class="star-path"
+                          />
+                        </g>
+                        <!-- 围绕中心旋转的星星1 (上方) -->
+                        <g class="star-group star-1" transform="translate(12, 12)">
+                          <path
+                            d="M12 2L14.09 8.26L20 9.27L15 13.14L16.18 19.02L12 15.77L7.82 19.02L9 13.14L4 9.27L9.91 8.26L12 2Z"
+                            fill="#b1adf3"
+                            class="star-path"
+                            transform="scale(0.5) translate(0, -16)"
+                          />
+                        </g>
+                        <!-- 围绕中心旋转的星星2 (右侧) -->
+                        <g class="star-group star-2" transform="translate(12, 12)">
+                          <path
+                            d="M12 2L14.09 8.26L20 9.27L15 13.14L16.18 19.02L12 15.77L7.82 19.02L9 13.14L4 9.27L9.91 8.26L12 2Z"
+                            fill="#b1adf3"
+                            class="star-path"
+                            transform="scale(0.5) translate(16, 0)"
+                          />
+                        </g>
+                        <!-- 围绕中心旋转的星星3 (下方) -->
+                        <g class="star-group star-3" transform="translate(12, 12)">
+                          <path
+                            d="M12 2L14.09 8.26L20 9.27L15 13.14L16.18 19.02L12 15.77L7.82 19.02L9 13.14L4 9.27L9.91 8.26L12 2Z"
+                            fill="#b1adf3"
+                            class="star-path"
+                            transform="scale(0.5) translate(0, 16)"
+                          />
+                        </g>
+                        <!-- 围绕中心旋转的星星4 (左侧) -->
+                        <g class="star-group star-4" transform="translate(12, 12)">
+                          <path
+                            d="M12 2L14.09 8.26L20 9.27L15 13.14L16.18 19.02L12 15.77L7.82 19.02L9 13.14L4 9.27L9.91 8.26L12 2Z"
+                            fill="#b1adf3"
+                            class="star-path"
+                            transform="scale(0.5) translate(-16, 0)"
+                          />
+                        </g>
+                      </svg>
+                    </div>
+                    <!-- 步骤信息显示 -->
+                    <transition name="step-fade" mode="out-in">
+                      <div
+                        v-if="getStepProgressForIndex(index)"
+                        :key="`step-${index}-${getStepProgressForIndex(index)?.progressId}`"
+                        class="step-progress-text"
+                      >
+                        {{ getStepProgressForIndex(index)?.stepName }}
+                      </div>
+                    </transition>
+                  </div>
+                  <!-- 单独显示步骤信息（当进度组件显示时，只显示步骤信息，不显示星星） -->
+                  <div
+                    v-else-if="getStepProgressForIndex(index) && progressDisplayStates[index]"
+                    class="flex items-center gap-2 mb-2"
+                  >
+                    <transition name="step-fade" mode="out-in">
+                      <div
+                        :key="`step-${index}-${getStepProgressForIndex(index)?.progressId}`"
+                        class="step-progress-text"
+                      >
+                        {{ getStepProgressForIndex(index)?.stepName }}
+                      </div>
+                    </transition>
+                  </div>
                   <MarkdownPreview
                     :reader="item.reader"
                     :model="defaultLLMTypeForStream"
@@ -1746,6 +2014,7 @@ const handleHistoryClick = async (item: any) => {
                     @recycle-qa="() => onRecycleQa(index)"
                     @praise-fead-back="() => onPraiseFeadBack(index)"
                     @progress-display-change="(hasProgress: boolean) => onProgressDisplayChange(index, hasProgress)"
+                    @step-progress="(progress: any) => onStepProgress(index, progress)"
                     @belittle-feedback="
                       () => onBelittleFeedback(index)
                     "
@@ -2733,5 +3002,104 @@ const handleHistoryClick = async (item: any) => {
   to {
     opacity: 1;
   }
+}
+
+/* 星星动画样式 */
+.star-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.star-spinner svg {
+  transform-origin: 12px 12px;
+}
+
+/* 中心星星保持静止，只闪烁 */
+.star-spinner .star-center {
+  transform-origin: 12px 12px;
+  animation: starTwinkle 1.5s ease-in-out infinite;
+}
+
+/* 围绕中心旋转的星星组 */
+.star-spinner .star-1 {
+  transform-origin: 0 0;
+  animation: starOrbit 3s linear infinite, starTwinkle 1.5s ease-in-out infinite;
+  animation-delay: 0s, 0s;
+}
+
+.star-spinner .star-2 {
+  transform-origin: 0 0;
+  animation: starOrbit 3s linear infinite, starTwinkle 1.5s ease-in-out infinite;
+  animation-delay: 0s, 0.3s;
+}
+
+.star-spinner .star-3 {
+  transform-origin: 0 0;
+  animation: starOrbit 3s linear infinite, starTwinkle 1.5s ease-in-out infinite;
+  animation-delay: 0s, 0.6s;
+}
+
+.star-spinner .star-4 {
+  transform-origin: 0 0;
+  animation: starOrbit 3s linear infinite, starTwinkle 1.5s ease-in-out infinite;
+  animation-delay: 0s, 0.9s;
+}
+
+.star-spinner .star-path {
+  transform-origin: center;
+}
+
+/* 围绕中心旋转的轨道动画 */
+@keyframes starOrbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 闪烁动画 */
+@keyframes starTwinkle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* 步骤信息样式 */
+.step-progress-text {
+  color: #b1adf3;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap; /* 防止换行，确保在同一行显示 */
+  white-space: nowrap;
+  line-height: 24px;
+}
+
+/* 步骤信息替换动画 */
+.step-fade-enter-active,
+.step-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.step-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+.step-fade-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.step-fade-enter-to,
+.step-fade-leave-from {
+  opacity: 1;
+  transform: translateX(0);
 }
 </style>

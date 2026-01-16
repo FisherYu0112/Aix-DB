@@ -85,8 +85,8 @@ export const transformStreamValue: Record<
     if (typeof content === 'string' && content.trim()) {
       try {
         const json = JSON.parse(content.trim())
-        // 检查是否是进度信息
-        if (json && json.type === 'step_progress') {
+        // 检查是否是进度信息（需要同时有 step 和 stepName）
+        if (json && json.type === 'step_progress' && json.step && json.stepName && json.status && json.progressId) {
           console.log('Transform standard 识别到进度数据:', json)
           return {
             progress: json,
@@ -114,7 +114,7 @@ export const transformStreamValue: Record<
         }
         // 处理进度信息（严格按照协议格式检查）
         // 协议格式：{type: "step_progress", step: string, stepName: string, status: "start"|"complete", progressId: string, ...}
-        if (json && json.type === 'step_progress' && json.step && json.status && json.progressId) {
+        if (json && json.type === 'step_progress' && json.step && json.stepName && json.status && json.progressId) {
           return {
             progress: json,
           }
@@ -160,7 +160,7 @@ export const transformStreamValue: Record<
         }
         // 处理进度信息（严格按照协议格式检查）
         // 协议格式：{type: "step_progress", step: string, stepName: string, status: "start"|"complete", progressId: string, ...}
-        if (json && json.type === 'step_progress' && json.step && json.status && json.progressId) {
+        if (json && json.type === 'step_progress' && json.step && json.stepName && json.status && json.progressId) {
           return {
             progress: json,
           }
