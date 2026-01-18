@@ -1,0 +1,95 @@
+version: '3.8'
+
+# ============================================
+# All-in-One 部署配置
+# 单容器包含: PostgreSQL + Sanic + Nginx + MinIO
+# ============================================
+
+services:
+  chat-app:
+    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/chat-all-in-one:latest
+    container_name: chat-all-in-one
+    ports:
+      - "80:80" # Nginx 前端
+      - "5432:5432" # PostgreSQL (可选，用于外部连接)
+      - "9000:9000" # MinIO API
+      - "9001:9001" # MinIO Console
+    volumes:
+      # 数据持久化
+      - chat-pg-data:/var/lib/postgresql/data
+      - chat-minio-data:/data/minio
+      - chat-logs:/var/log/supervisor
+    environment:
+      # ============================================
+      # PostgreSQL 配置
+      # ============================================
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-chat_db}
+
+      # ============================================
+      # 后端服务配置
+      # ============================================
+      SERVER_PORT: 8089
+      SERVER_WORKERS: ${SERVER_WORKERS:-2}
+
+      # ============================================
+      # 大模型配置 (必填)
+      # ============================================
+      MODEL_API_KEY: ${MODEL_API_KEY:?请设置 MODEL_API_KEY}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-https://api.openai.com/v1}
+      MODEL_NAME: ${MODEL_NAME:-gpt-4}
+      MODEL_TEMPERATURE: ${MODEL_TEMPERATURE:-0.7}
+
+      # ============================================
+      # Embedding 模型配置 (可选)
+      # ============================================
+      EMBEDDING_MODEL_BASE_URL: ${EMBEDDING_MODEL_BASE_URL:-}
+      EMBEDDING_MODEL_API_KEY: ${EMBEDDING_MODEL_API_KEY:-}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-}
+
+      # ============================================
+      # MinIO 存储配置 (内置)
+      # ============================================
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-localhost}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-admin}}
+      MiNIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-12345678}}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-12345678}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-104857600}
+
+      # ============================================
+      # 其他配置
+      # ============================================
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      SHOW_THINKING_PROCESS: ${SHOW_THINKING_PROCESS:-false}
+
+      TZ: Asia/Shanghai
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # 资源限制 (可选)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+volumes:
+  chat-pg-data:
+    name: chat-pg-data
+  chat-minio-data:
+    name: chat-minio-data
+  chat-logs:
+    name: chat-logs
