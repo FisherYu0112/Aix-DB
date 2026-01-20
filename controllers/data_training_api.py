@@ -30,7 +30,7 @@ bp = Blueprint("dataTraining", url_prefix="/system/data-training")
 async def page_list(request: Request, page: int, size: int):
     question = request.args.get("question")
     # Assuming oid=1 for now, or get from token if available in request.ctx
-    # In sanic-web/controllers/aimodel_api.py it doesn't seem to access user info, 
+    # In Aix-DB/controllers/aimodel_api.py it doesn't seem to access user info, 
     # but previous implementation used current_user.oid. 
     # For now, we use default oid=1 as per requirement/simplicity or check request.ctx
     return await page_data_training(page, size, question)

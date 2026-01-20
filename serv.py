@@ -14,12 +14,51 @@ from config.load_env import load_env
 # 加载配置文件
 load_env()
 
-app = Sanic("sanic-web")
+# 确保日志配置在 Sanic 启动前已正确加载
+import logging
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    # 如果 root logger 没有 handlers，说明配置加载失败，使用备用配置
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)-8s | %(asctime)s | [PID:%(process)d] | %(filename)s:%(lineno)d | %(funcName)s() | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+
+app = Sanic("Aix-DB", configure_logging=False)
+
+# 确保在每个 worker 启动时都重新加载日志配置
+@app.before_server_start
+async def ensure_logging_config(app, loop):
+    """
+    在每个 worker 启动时确保日志配置正确
+    Sanic 使用多进程模式时，每个 worker 都会重新加载代码，需要确保日志配置正确
+    """
+    import logging
+    from config.load_env import load_env
+    
+    # 重新加载日志配置（如果被覆盖了）
+    root_logger = logging.getLogger()
+    
+    # 如果 root logger 没有 handlers 或者级别不对，重新加载配置
+    if not root_logger.handlers or root_logger.level > logging.INFO:
+        # 重新加载日志配置
+        load_env()
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        logging.info("✅ [SERV] Logging configuration reloaded in worker - handlers: %d, level: %s", 
+                     len(root_logger.handlers), root_logger.level)
+
 autodiscover(
     app,
     controllers,
     recursive=True,
 )
+
+# 设置 worker 状态 TTL，优先使用环境变量
+app.config.SANIC_WORKER_STATE_TTL = int(os.getenv("SANIC_WORKER_STATE_TTL", 120))
+
 # 添加api docs
 app.extend(
     config={
@@ -27,8 +66,8 @@ app.extend(
         "OAS_PATH_TO_SWAGGER_HTML": "docs/swagger.html",
         "OAS_UI_DEFAULT": "swagger",
         "OAS_VERSION": "3.1.0",
-        "OAS_TITLE": "Sanic Web API",
-        "OAS_DESCRIPTION": "Sanic Web API 接口文档",
+        "OAS_TITLE": "Aix-DB API",
+        "OAS_DESCRIPTION": "Aix-DB API 接口文档",
         "OAS_VERSION_STRING": "1.0.0",
     }
 )
@@ -42,6 +81,7 @@ def get_server_config():
         "host": os.getenv("SERVER_HOST", "0.0.0.0"),
         "port": int(os.getenv("SERVER_PORT", 8088)),
         "workers": int(os.getenv("SERVER_WORKERS", 2)),
+        "auto_reload": False,
     }
 
 

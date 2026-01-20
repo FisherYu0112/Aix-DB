@@ -83,7 +83,7 @@ declare module 'vue' {
     Pagination: typeof import('./src/components/Pagination/index.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    SideBarItem: typeof import('./src/components/SideBar/item.vue')['default']
+    SideBarItem: typeof import('./src/components/SideBar/Item.vue')['default']
     TableList: typeof import('./src/components/TableList/index.vue')['default']
   }
 }

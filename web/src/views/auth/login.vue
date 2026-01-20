@@ -1,5 +1,6 @@
 <script lang="tsx" setup>
 import * as GlobalAPI from '@/api'
+import IconifyIcon from '@/components/IconifyIcon/index.vue'
 
 /* ---------- 登录业务 ---------- */
 const form = ref({ username: 'admin', password: '123456' })
@@ -62,7 +63,7 @@ const handleLogin = async () => {
       <div class="header">
         <div class="logo-area">
           <div class="logo-icon-wrapper">
-            <div class="i-hugeicons:ai-chat-02 text-42 text-white"></div>
+            <IconifyIcon icon="hugeicons:ai-chat-02" :class="['text-42', 'text-white']" />
           </div>
         </div>
         <h1 class="app-name">

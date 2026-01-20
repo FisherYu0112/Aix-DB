@@ -1014,17 +1014,22 @@ class DatabaseService:
             # 构建输出（表关系补充将在 SQL 生成阶段进行）
             filtered_info = {name: all_table_info[name] for name in final_table_names if name in all_table_info}
 
-            # 打印结果摘要
-            print(f"\n🔍 用户查询: {user_query}")
-            print("📊 检索与排序结果:")
+            # 打印结果摘要（使用 logger 以便统一格式化）
+            logger.info("🔍 用户查询: %s", user_query)
+            logger.info("📊 检索与排序结果:")
             for i, table_name in enumerate(final_table_names[:TABLE_RETURN_COUNT]):
                 if table_name in self._table_names:
                     bm25_idx = self._table_names.index(table_name)
                     bm25_rank = bm25_top_indices.index(bm25_idx) + 1 if bm25_idx in bm25_top_indices else "-"
                     vector_rank = vector_top_indices.index(bm25_idx) + 1 if bm25_idx in vector_top_indices else "-"
                     rerank_score = next((score for name, score in reranked_results if name == table_name), 0.0)
-                    print(
-                        f"  {i + 1}. {table_name:<15} | BM25: {bm25_rank:>2} | Vector: {vector_rank:>2} | Rerank: {rerank_score:.3f}"
+                    logger.info(
+                        "  %s. %-15s | BM25: %2s | Vector: %2s | Rerank: %.3f",
+                        i + 1,
+                        table_name,
+                        bm25_rank,
+                        vector_rank,
+                        rerank_score,
                     )
 
             state["db_info"] = filtered_info

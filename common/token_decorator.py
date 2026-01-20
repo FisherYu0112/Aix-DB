@@ -22,7 +22,7 @@ def check_token(f):
                 token = token.split(" ")[1]
 
             # 解码 JWT token
-            payload = jwt.decode(token, key=os.getenv("JWT_SECRET_KEY"), algorithms=["HS256"])
+            payload = jwt.decode(token, key=os.getenv("JWT_SECRET_KEY", "550e8400-e29b-41d4-a716-446655440000"), algorithms=["HS256"])
             # 检查 token 是否过期
             if "exp" in payload and datetime.utcfromtimestamp(payload["exp"]) < datetime.utcnow():
                 return response.json({"message": "Token已过期", "code": 401}, status=401)

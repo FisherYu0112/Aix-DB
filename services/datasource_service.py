@@ -16,7 +16,8 @@ from model.datasource_models import Datasource, DatasourceTable, DatasourceField
 from common.permission_util import is_admin
 from model.db_connection_pool import get_db_pool
 from model.db_models import TAiModel
-from langfuse.openai import OpenAI
+# 延迟导入 langfuse，避免在模块加载时触发 OpenTelemetry 初始化问题
+# from langfuse.openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +273,8 @@ class DatasourceService:
                     else:
                         base_url = f"https://{base_url}"
                 
+                # 延迟导入，避免在模块加载时触发 OpenTelemetry 初始化问题
+                from langfuse.openai import OpenAI
                 embedding_client = OpenAI(
                     api_key=model.api_key or "empty",
                     base_url=base_url

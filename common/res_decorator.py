@@ -60,6 +60,7 @@ def async_json_resp(func):
         :param kwargs:
         :return:
         """
+     
         data = None
         # 获取请求方法和参数
         method = request.method
@@ -81,8 +82,11 @@ def async_json_resp(func):
             }
             res = response.json(body, dumps=CustomJSONEncoder().encode)
 
+            # 验证日志配置
+            root_logger = logging.getLogger()
             logging.info(
-                f"Request Path: {path},Method: {method}, Params: {params}, JSON Body: {json_body}, Response: {body}"
+                "Request Path: %s, Method: %s, Params: %s, JSON Body: %s, Response: %s [root logger level: %s, handlers: %d]",
+                path, method, params, json_body, body, root_logger.level, len(root_logger.handlers)
             )
 
             return res
@@ -96,8 +100,11 @@ def async_json_resp(func):
 
             res = response.json(body, dumps=CustomJSONEncoder().encode)
 
+            # 验证日志配置
+            root_logger = logging.getLogger()
             logging.info(
-                f"Request Path: {path}, Method: {method},Params: {params}, JSON Body: {json_body}, Response: {body}"
+                "Request Path: %s, Method: %s, Params: %s, JSON Body: %s, Response: %s [root logger level: %s, handlers: %d]",
+                path, method, params, json_body, body, root_logger.level, len(root_logger.handlers)
             )
             return res
 
@@ -109,8 +116,11 @@ def async_json_resp(func):
             }
             res = response.json(body, dumps=CustomJSONEncoder().encode)
 
+            # 验证日志配置
+            root_logger = logging.getLogger()
             logging.info(
-                f"Request Path: {path}, Method: {method},Params: {params}, JSON Body: {json_body}, Response: {body}"
+                "Request Path: %s, Method: %s, Params: %s, JSON Body: %s, Response: %s [root logger level: %s, handlers: %d]",
+                path, method, params, json_body, body, root_logger.level, len(root_logger.handlers)
             )
 
             traceback.print_exception(e)
