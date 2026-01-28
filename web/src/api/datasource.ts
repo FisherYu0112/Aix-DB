@@ -243,11 +243,27 @@ export async function update_datasource(data: any) {
 
 /**
  * 同步数据源表
+ * 支持大量表的同步，超时时间根据表数量动态调整
+ * @param dsId 数据源ID
+ * @param tables 表列表
+ * @param isSelectAll 是否全选（用于后端优化处理逻辑）
  */
-export async function sync_datasource_tables(dsId: number | string, tables: any[]) {
+export async function sync_datasource_tables(dsId: number | string, tables: any[], isSelectAll: boolean = false) {
   const userStore = useUserStore()
   const token = userStore.getUserToken()
   const url = new URL(`${location.origin}/sanic/datasource/syncTables/${dsId}`)
+  
+  // 根据表数量动态设置超时时间：每100张表增加1分钟，最少5分钟，最多30分钟
+  const tableCount = tables.length
+  const timeoutMinutes = Math.min(Math.max(5, Math.ceil(tableCount / 100)), 30)
+  const timeoutMs = timeoutMinutes * 60 * 1000
+  
+  // 创建 AbortController 用于超时控制
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+  
   const req = new Request(url, {
     mode: 'cors',
     method: 'post',
@@ -255,9 +271,16 @@ export async function sync_datasource_tables(dsId: number | string, tables: any[
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(tables),
+    body: JSON.stringify({ 
+      tables,
+      is_select_all: isSelectAll 
+    }),
+    signal: controller.signal,
   })
-  return fetch(req)
+  
+  return fetch(req).finally(() => {
+    clearTimeout(timeoutId)
+  })
 }
 
 /**

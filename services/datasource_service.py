@@ -6,16 +6,18 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from py2neo import Graph
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from model.datasource_models import Datasource, DatasourceTable, DatasourceField, DatasourceAuth
 from common.permission_util import is_admin
+from model.datasource_models import (Datasource, DatasourceAuth,
+                                     DatasourceField, DatasourceTable)
 from model.db_connection_pool import get_db_pool
 from model.db_models import TAiModel
+
 # 延迟导入 langfuse，避免在模块加载时触发 OpenTelemetry 初始化问题
 # from langfuse.openai import OpenAI
 
@@ -36,7 +38,7 @@ class DatasourceService:
         # 如果是管理员，返回所有数据源
         if user_id and is_admin(user_id):
             return query.order_by(Datasource.create_time.desc()).all()
-        
+
         # 普通用户：只返回被授权的数据源
         if user_id:
             # 查询用户被授权的数据源ID列表
@@ -52,13 +54,13 @@ class DatasourceService:
                 .all()
             )
             auth_ds_ids = [ds_id[0] for ds_id in auth_ds_ids]
-            
+
             if auth_ds_ids:
                 query = query.filter(Datasource.id.in_(auth_ds_ids))
             else:
                 # 如果用户没有任何授权，返回空列表
                 return []
-        
+
         return query.order_by(Datasource.create_time.desc()).all()
 
     @staticmethod
@@ -69,8 +71,9 @@ class DatasourceService:
     @staticmethod
     def create_datasource(session: Session, data: Dict[str, Any], user_id: int) -> Datasource:
         """创建数据源"""
-        from common.datasource_util import DatasourceConfigUtil
         import json
+
+        from common.datasource_util import DatasourceConfigUtil
 
         # 如果配置是字典，需要加密
         configuration = data.get("configuration", "")
@@ -109,9 +112,17 @@ class DatasourceService:
         return datasource
 
     @staticmethod
-    def _save_tables_and_fields(session: Session, datasource: Datasource, tables: List[Dict[str, Any]]):
-        """保存/同步表和字段信息，自动更新计数"""
-        from common.datasource_util import DatasourceConnectionUtil, DatasourceConfigUtil
+    def _save_tables_and_fields(session: Session, datasource: Datasource, tables: List[Dict[str, Any]], is_select_all: bool = False):
+        """保存/同步表和字段信息，自动更新计数
+
+        Args:
+            session: 数据库会话
+            datasource: 数据源对象
+            tables: 表列表
+            is_select_all: 是否全选（用于优化处理逻辑）
+        """
+        from common.datasource_util import (DatasourceConfigUtil,
+                                            DatasourceConnectionUtil)
 
         # 解密配置
         config = DatasourceConfigUtil.decrypt_config(datasource.configuration)
@@ -125,8 +136,13 @@ class DatasourceService:
         try:
             all_db_tables = DatasourceConnectionUtil.get_tables(datasource.type, config)
             total_count = len(all_db_tables)
+
+            # 如果是全选，记录日志
+            if is_select_all:
+                logger.info(f"全选模式：处理 {len(tables)} 张表，数据库中共 {total_count} 张表")
         except Exception:
             total_count = len(tables)
+            logger.warning(f"无法获取数据库总表数，使用传入的表数量: {total_count}")
 
         for table_info in tables:
             table_name = table_info.get("table_name") or table_info.get("tableName")
@@ -251,28 +267,28 @@ class DatasourceService:
             with db_pool.get_session() as session:
                 # model_type: 2 -> Embedding
                 model = session.query(TAiModel).filter(TAiModel.model_type == 2, TAiModel.default_model == True).first()
-                
+
                 if not model:
                     # 尝试查找任何 embedding 模型
                     model = session.query(TAiModel).filter(TAiModel.model_type == 2).first()
-                
+
                 if not model:
                     logger.info("未配置在线嵌入模型（model_type=2），将使用离线模型计算表 embedding")
                     return None, None
-                
+
                 # 处理 base_url，确保包含协议前缀
                 base_url = (model.api_domain or "").strip()
                 if not base_url:
                     logger.warning("表结构 embedding 在线模型的 API Domain 为空，将使用离线模型")
                     return None, None
-                
+
                 if not base_url.startswith(("http://", "https://")):
                     # 本地地址默认 http，其它默认 https
                     if base_url.startswith(("localhost", "127.0.0.1", "0.0.0.0")):
                         base_url = f"http://{base_url}"
                     else:
                         base_url = f"https://{base_url}"
-                
+
                 # 延迟导入，避免在模块加载时触发 OpenTelemetry 初始化问题
                 from langfuse.openai import OpenAI
                 embedding_client = OpenAI(
@@ -289,21 +305,21 @@ class DatasourceService:
     def _build_table_document(table: DatasourceTable, fields: List[Dict[str, Any]]) -> str:
         """
         构建用于检索的文档文本（表名 + 注释 + 字段名 + 字段注释）。
-        
+
         Args:
             table: 表对象
             fields: 字段列表
-            
+
         Returns:
             文档文本
         """
         parts = [table.table_name]
-        
+
         # 添加表注释（优先使用 custom_comment，否则使用 table_comment）
         table_comment = table.custom_comment or table.table_comment or ""
         if table_comment:
             parts.append(table_comment)
-        
+
         # 添加字段名和字段注释
         for field in fields:
             field_name = field.get("fieldName") or field.get("field_name")
@@ -312,14 +328,14 @@ class DatasourceService:
                 field_comment = field.get("fieldComment") or field.get("field_comment") or ""
                 if field_comment:
                     parts.append(field_comment)
-        
+
         return " ".join(parts)
 
     @staticmethod
     def _compute_and_save_table_embedding(session: Session, table: DatasourceTable, fields: List[Dict[str, Any]]):
         """
         计算并保存表的 embedding。
-        
+
         Args:
             session: 数据库会话
             table: 表对象
@@ -329,17 +345,17 @@ class DatasourceService:
         if not hasattr(table, 'embedding'):
             logger.debug(f"表 {table.table_name} 没有 embedding 字段，跳过计算")
             return
-        
+
         # 构建文档文本
         document = DatasourceService._build_table_document(table, fields)
-        
+
         if not document or not document.strip():
             logger.warning(f"表 {table.table_name} 的文档文本为空，跳过 embedding 计算")
             return
-        
+
         # 获取 embedding 客户端（支持在线/离线模型切换）
         embedding_client, model_name = DatasourceService._get_embedding_client()
-        
+
         try:
             if embedding_client and model_name:
                 # 使用在线模型
@@ -349,18 +365,19 @@ class DatasourceService:
             else:
                 # 使用离线模型
                 logger.info(f"计算表 {table.table_name} 的 embedding（离线模型）...")
-                from common.local_embedding import generate_embedding_local_sync
+                from common.local_embedding import \
+                    generate_embedding_local_sync
                 embedding_vec = generate_embedding_local_sync(document)
                 if not embedding_vec:
                     logger.warning(f"离线模型生成表 {table.table_name} 的 embedding 失败")
                     return
-            
+
             # 将 embedding 转换为 JSON 字符串并保存
             embedding_json = json.dumps(embedding_vec)
             table.embedding = embedding_json
-            
+
             logger.info(f"✅ 表 {table.table_name} 的 embedding 计算并保存成功（维度: {len(embedding_vec)}）")
-            
+
         except Exception as e:
             logger.error(f"计算表 {table.table_name} 的 embedding 失败: {e}", exc_info=True)
             # 不抛出异常，避免影响表同步流程
@@ -424,8 +441,9 @@ class DatasourceService:
             else:
                 # 使用离线模型逐个计算
                 logger.info(f"批量计算 {len(docs)} 个表的 embedding（离线模型）...")
-                from common.local_embedding import generate_embedding_local_sync
-                
+                from common.local_embedding import \
+                    generate_embedding_local_sync
+
                 success_count = 0
                 for idx, table in enumerate(tables_for_embedding):
                     try:
@@ -438,7 +456,7 @@ class DatasourceService:
                             logger.warning(f"离线模型生成表 {table.table_name} 的 embedding 失败")
                     except Exception as e:
                         logger.error(f"生成表 {table.table_name} 的 embedding 失败: {e}")
-                
+
                 logger.info(f"✅ 批量表 embedding 计算并保存成功（成功: {success_count}/{len(tables_for_embedding)}，维度: 768）")
         except Exception as e:
             logger.error(f"批量计算表 embedding 失败: {e}", exc_info=True)
@@ -461,8 +479,9 @@ class DatasourceService:
                 configuration = DatasourceConfigUtil.encrypt_config(configuration)
             elif isinstance(configuration, str):
                 try:
-                    from common.datasource_util import DatasourceConfigUtil
                     import json
+
+                    from common.datasource_util import DatasourceConfigUtil
                     config_dict = json.loads(configuration)
                     configuration = DatasourceConfigUtil.encrypt_config(config_dict)
                 except (json.JSONDecodeError, TypeError):
@@ -481,12 +500,38 @@ class DatasourceService:
         return datasource
 
     @staticmethod
-    def sync_tables(session: Session, ds_id: int, tables: List[Dict[str, Any]]) -> bool:
-        """根据传入的表列表同步表/字段数据"""
+    def sync_tables(session: Session, ds_id: int, tables: List[Dict[str, Any]], is_select_all: bool = False) -> bool:
+        """根据传入的表列表同步表/字段数据
+
+        Args:
+            session: 数据库会话
+            ds_id: 数据源ID
+            tables: 表列表（用户选择的表）
+            is_select_all: 是否全选（True表示全选所有表，False表示仅处理选择的表）
+        """
         datasource = session.query(Datasource).filter(Datasource.id == ds_id).first()
         if not datasource:
             return False
-        DatasourceService._save_tables_and_fields(session, datasource, tables)
+
+        # 获取数据库总表数，用于日志和统计
+        from common.datasource_util import (DatasourceConfigUtil,
+                                            DatasourceConnectionUtil)
+        try:
+            config = DatasourceConfigUtil.decrypt_config(datasource.configuration)
+            all_db_tables = DatasourceConnectionUtil.get_tables(datasource.type, config)
+            total_db_table_count = len(all_db_tables)
+            selected_table_count = len(tables)
+
+            if is_select_all:
+                logger.info(f"全选模式：处理用户选择的 {selected_table_count} 张表（数据库中共 {total_db_table_count} 张表）")
+            else:
+                logger.info(f"部分选择模式：仅处理用户选择的 {selected_table_count} 张表（数据库中共 {total_db_table_count} 张表）")
+        except Exception as e:
+            logger.warning(f"无法获取数据库总表数: {e}")
+            logger.info(f"同步表：{'全选模式' if is_select_all else '部分选择模式'}，处理 {len(tables)} 张表")
+
+        # 处理用户选择的表
+        DatasourceService._save_tables_and_fields(session, datasource, tables, is_select_all)
         session.commit()
         return True
 
@@ -516,7 +561,8 @@ class DatasourceService:
     def check_connection(ds: Datasource) -> (bool, str):
         """检查数据源连接"""
         try:
-            from common.datasource_util import DatasourceConnectionUtil, DatasourceConfigUtil
+            from common.datasource_util import (DatasourceConfigUtil,
+                                                DatasourceConnectionUtil)
 
             # 解密配置
             config = DatasourceConfigUtil.decrypt_config(ds.configuration)
@@ -530,8 +576,9 @@ class DatasourceService:
     def check_connection_by_config(ds_type: str, config_str: str) -> (bool, str):
         """根据配置检查连接"""
         try:
-            from common.datasource_util import DatasourceConnectionUtil
             import json
+
+            from common.datasource_util import DatasourceConnectionUtil
 
             config = json.loads(config_str)
             return DatasourceConnectionUtil.test_connection(ds_type, config)
@@ -543,8 +590,9 @@ class DatasourceService:
     def get_tables_by_config(ds_type: str, config_str: str) -> List[Dict[str, Any]]:
         """根据配置获取表列表"""
         try:
-            from common.datasource_util import DatasourceConnectionUtil
             import json
+
+            from common.datasource_util import DatasourceConnectionUtil
 
             config = json.loads(config_str)
             return DatasourceConnectionUtil.get_tables(ds_type, config)
@@ -588,7 +636,7 @@ class DatasourceService:
             }
             for field in fields
         ]
-        
+
         # 重新计算 embedding
         try:
             DatasourceService._compute_and_save_table_embedding(session, table, fields_data)
@@ -626,7 +674,7 @@ class DatasourceService:
                 }
                 for f in fields
             ]
-            
+
             # 重新计算 embedding
             try:
                 DatasourceService._compute_and_save_table_embedding(session, table, fields_data)
@@ -641,7 +689,8 @@ class DatasourceService:
         session: Session, ds_id: int, table: Dict[str, Any], fields: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """预览表数据"""
-        from common.datasource_util import DatasourceConnectionUtil, DatasourceConfigUtil
+        from common.datasource_util import (DatasourceConfigUtil,
+                                            DatasourceConnectionUtil)
 
         # 获取数据源
         datasource = session.query(Datasource).filter(Datasource.id == ds_id).first()
@@ -777,7 +826,7 @@ class DatasourceService:
             query = """
             MATCH (t1:Table)-[r:REFERENCES]->(t2:Table)
             WHERE t1.name IN $table_names AND t2.name IN $table_names
-            RETURN 
+            RETURN
               t1.name AS from_table,
               t2.name AS to_table,
               r.field_relation AS field_relation
@@ -794,11 +843,11 @@ class DatasourceService:
     def get_authorized_users(session: Session, datasource_id: int) -> List[int]:
         """
         获取数据源已授权的用户ID列表
-        
+
         Args:
             session: 数据库会话
             datasource_id: 数据源ID
-            
+
         Returns:
             List[int]: 已授权的用户ID列表
         """
@@ -814,12 +863,12 @@ class DatasourceService:
     def authorize_datasource(session: Session, datasource_id: int, user_ids: List[int]) -> bool:
         """
         授权用户使用数据源
-        
+
         Args:
             session: 数据库会话
             datasource_id: 数据源ID
             user_ids: 用户ID列表
-            
+
         Returns:
             bool: 授权成功返回True
         """
@@ -827,7 +876,7 @@ class DatasourceService:
         session.query(DatasourceAuth).filter(
             DatasourceAuth.datasource_id == datasource_id
         ).delete(synchronize_session=False)
-        
+
         # 添加新授权
         for user_id in user_ids:
             auth = DatasourceAuth(
@@ -837,7 +886,7 @@ class DatasourceService:
                 create_time=datetime.now()
             )
             session.add(auth)
-        
+
         session.commit()
         return True
 

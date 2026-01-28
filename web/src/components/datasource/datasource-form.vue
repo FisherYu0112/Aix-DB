@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import type { FormInst, FormRules } from 'naive-ui'
 import { computed, reactive, ref, watch } from 'vue'
+import { useDialog } from 'naive-ui'
+import { useInfiniteScroll } from '@vueuse/core'
 import {
   add_datasource,
   check_datasource_connection,
@@ -10,6 +12,8 @@ import {
   sync_datasource_tables,
   update_datasource,
 } from '@/api/datasource'
+
+const dialog = useDialog()
 
 interface Props {
   show: boolean
@@ -113,9 +117,18 @@ const rules: FormRules = {
 const loading = ref(false)
 const testing = ref(false)
 const currentStep = ref(1) // 1: 基本信息, 2: 选择表
-const tableList = ref<any[]>([])
+const tableList = ref<any[]>([]) // 所有表数据（已加载的）
 const selectedTables = ref<string[]>([])
 const tableListLoading = ref(false)
+// 搜索和无限滚动
+const searchKeyword = ref('')
+const displayedTableCount = ref(50) // 初始显示50个表
+const pageSize = ref(50) // 每次加载50个表
+const isLoadingMore = ref(false)
+const hasMoreTables = ref(true)
+const tableListScrollRef = ref<HTMLElement | null>(null)
+// 是否全选标识
+const isSelectAll = ref(false)
 
 // 是否显示 Schema 字段
 const showSchema = computed(() => needSchemaTypes.includes(formData.type))
@@ -193,6 +206,11 @@ const initForm = async () => {
   currentStep.value = 1
   selectedTables.value = []
   tableList.value = []
+  searchKeyword.value = ''
+  displayedTableCount.value = pageSize.value
+  hasMoreTables.value = true
+  isLoadingMore.value = false
+  isSelectAll.value = false
 }
 
 // 测试连接
@@ -252,6 +270,10 @@ const fetchTableList = async () => {
     const result = await response.json()
     if (result.code === 200) {
       tableList.value = result.data || []
+      // 重置显示数量
+      displayedTableCount.value = Math.min(pageSize.value, tableList.value.length)
+      hasMoreTables.value = tableList.value.length > displayedTableCount.value
+
       // 如果是编辑模式，加载已选中的表
       if (props.datasource?.id) {
         const tablesResponse = await fetch_datasource_table_list(props.datasource.id)
@@ -315,25 +337,219 @@ const handlePrev = () => {
   currentStep.value = 1
 }
 
-// 全选/取消全选
-const handleSelectAll = () => {
-  if (selectedTables.value.length === tableList.value.length) {
-    selectedTables.value = []
-  } else {
-    selectedTables.value = tableList.value.map((table) => table.tableName)
+// 加载更多表（无限滚动）
+const loadMoreTables = async () => {
+  if (isLoadingMore.value || !canLoadMore.value) {
+    return
+  }
+
+  isLoadingMore.value = true
+  try {
+    // 模拟加载延迟，实际中可能不需要
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // 增加显示数量
+    displayedTableCount.value = Math.min(
+      displayedTableCount.value + pageSize.value,
+      filteredTableList.value.length
+    )
+
+    hasMoreTables.value = displayedTableCount.value < filteredTableList.value.length
+  } finally {
+    isLoadingMore.value = false
   }
 }
 
-// 是否全选
-const isAllSelected = computed(() => {
-  return tableList.value.length > 0 && selectedTables.value.length === tableList.value.length
+// 无限滚动：滚动到底部自动加载
+useInfiniteScroll(
+  tableListScrollRef,
+  () => {
+    if (!isLoadingMore.value && canLoadMore.value) {
+      loadMoreTables()
+    }
+  },
+  { distance: 100 }
+)
+
+// 全选/取消全选（当前显示的表）
+const handleSelectDisplayed = () => {
+  if (isDisplayedAllSelected.value) {
+    // 取消当前显示的表的选择
+    const displayedTableNames = displayedTableList.value.map((t) => t.tableName)
+    selectedTables.value = selectedTables.value.filter((name) => !displayedTableNames.includes(name))
+    // 取消全选标识（因为只选择了部分表）
+    isSelectAll.value = false
+  } else {
+    // 选择当前显示的所有表
+    const displayedTableNames = displayedTableList.value.map((t) => t.tableName)
+    const newSelected = new Set([...selectedTables.value, ...displayedTableNames])
+    selectedTables.value = Array.from(newSelected)
+    // 检查是否真的全选了所有表
+    if (selectedTables.value.length >= filteredTableList.value.length) {
+      isSelectAll.value = true
+    } else {
+      isSelectAll.value = false
+    }
+  }
+}
+
+// 计算预计处理时间（分钟）
+const calculateEstimatedTime = (tableCount: number): number => {
+  // 每100张表预计需要1分钟，最少1分钟
+  return Math.max(1, Math.ceil(tableCount / 100))
+}
+
+// 格式化时间显示
+const formatEstimatedTime = (minutes: number): string => {
+  if (minutes < 60) {
+    return `约 ${minutes} 分钟`
+  }
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (mins === 0) {
+    return `约 ${hours} 小时`
+  }
+  return `约 ${hours} 小时 ${mins} 分钟`
+}
+
+// 全选/取消全选（所有过滤后的表）
+const handleSelectAll = async () => {
+  if (isAllSelected.value) {
+    // 取消所有过滤后的表的选择
+    const filteredTableNames = filteredTableList.value.map((t) => t.tableName)
+    selectedTables.value = selectedTables.value.filter((name) => !filteredTableNames.includes(name))
+    isSelectAll.value = false // 取消全选标识
+    return
+  }
+
+  // 获取筛选后的表数量
+  const filteredCount = filteredTableList.value.length
+  const totalCount = tableList.value.length
+  const displayedCount = displayedTableList.value.length
+  const hasSearch = searchKeyword.value.trim().length > 0
+  const notAllDisplayed = displayedCount < filteredCount
+
+  // 如果筛选后的表数量很大，需要确认
+  const estimatedMinutes = calculateEstimatedTime(filteredCount)
+  const estimatedTimeText = formatEstimatedTime(estimatedMinutes)
+
+  // 构建提示内容
+  let content = `您将选择 ${filteredCount} 张表进行同步。`
+  if (notAllDisplayed) {
+    content += `\n（当前仅显示 ${displayedCount} 张，将自动选择全部 ${filteredCount} 张表）`
+  }
+  if (hasSearch && filteredCount < totalCount) {
+    content += `\n（当前筛选条件：共 ${totalCount} 张表，筛选后 ${filteredCount} 张）`
+  }
+  content += `\n预计处理时间：${estimatedTimeText}\n\n是否继续？`
+
+  // 如果表数量较多或未全部显示，显示确认对话框
+  if (filteredCount > displayedCount || filteredCount > 100) {
+    dialog.warning({
+      title: hasSearch ? '确认全选（筛选结果）' : '确认全选',
+      content,
+      positiveText: '确认全选',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        // 选择所有过滤后的表（这些表已经在内存中，不需要重新拉取）
+        const filteredTableNames = filteredTableList.value.map((t) => t.tableName)
+        const newSelected = new Set([...selectedTables.value, ...filteredTableNames])
+        selectedTables.value = Array.from(newSelected)
+        // 设置全选标识
+        isSelectAll.value = true
+        window.$ModalMessage.success(`已选择 ${filteredCount} 张表，预计处理时间：${estimatedTimeText}`)
+      },
+    })
+  } else {
+    // 表数量不多，直接选择
+    const filteredTableNames = filteredTableList.value.map((t) => t.tableName)
+    const newSelected = new Set([...selectedTables.value, ...filteredTableNames])
+    selectedTables.value = Array.from(newSelected)
+    // 设置全选标识
+    isSelectAll.value = true
+    if (filteredCount > 0) {
+      window.$ModalMessage.success(`已选择 ${filteredCount} 张表，预计处理时间：${estimatedTimeText}`)
+    }
+  }
+}
+
+// 搜索时重置显示数量
+watch(searchKeyword, () => {
+  displayedTableCount.value = pageSize.value
+  hasMoreTables.value = true
 })
+
+// 过滤后的表列表（根据搜索关键词）
+const filteredTableList = computed(() => {
+  if (!searchKeyword.value.trim()) {
+    return tableList.value
+  }
+  const keyword = searchKeyword.value.toLowerCase().trim()
+  return tableList.value.filter((table) => {
+    const name = (table.tableName || '').toLowerCase()
+    const comment = (table.tableComment || '').toLowerCase()
+    return name.includes(keyword) || comment.includes(keyword)
+  })
+})
+
+// 当前显示的表列表（用于无限滚动）
+const displayedTableList = computed(() => {
+  return filteredTableList.value.slice(0, displayedTableCount.value)
+})
+
+// 是否还有更多表可以加载
+const canLoadMore = computed(() => {
+  return displayedTableCount.value < filteredTableList.value.length
+})
+
+// 当前显示的表是否全选
+const isDisplayedAllSelected = computed(() => {
+  if (displayedTableList.value.length === 0) {
+    return false
+  }
+  return displayedTableList.value.every((table) => selectedTables.value.includes(table.tableName))
+})
+
+// 是否全选（所有过滤后的表）
+const isAllSelected = computed(() => {
+  if (filteredTableList.value.length === 0) {
+    return false
+  }
+  return filteredTableList.value.every((table) => selectedTables.value.includes(table.tableName))
+})
+
+// 监听选择变化，自动更新全选标识
+watch(selectedTables, (newSelected, oldSelected) => {
+  // 如果选择的表数量等于过滤后的表数量，且过滤后的表数量等于总表数，则认为是全选
+  if (newSelected.length === filteredTableList.value.length && filteredTableList.value.length === tableList.value.length) {
+    isSelectAll.value = true
+  } else {
+    isSelectAll.value = false
+  }
+}, { deep: true })
 
 // 保存数据源
 const handleSave = async () => {
+  // 防止重复提交
+  if (loading.value) {
+    return
+  }
+
   if (selectedTables.value.length === 0) {
     window.$ModalMessage.warning('请至少选择一个表')
     return
+  }
+
+  // 计算预计处理时间并提示用户
+  const selectedCount = selectedTables.value.length
+  const estimatedMinutes = calculateEstimatedTime(selectedCount)
+  const estimatedTimeText = formatEstimatedTime(estimatedMinutes)
+
+  if (selectedCount > 100) {
+    window.$ModalMessage.info(
+      `正在保存 ${selectedCount} 张表，预计处理时间：${estimatedTimeText}，请耐心等待...`,
+      { duration: 5000 }
+    )
   }
 
   loading.value = true
@@ -381,9 +597,13 @@ const handleSave = async () => {
       dsId = result.data?.id || dsId
       if (dsId) {
         try {
-          await sync_datasource_tables(dsId, tables)
+          // 同步表列表（可能耗时较长）
+          // 使用前端设置的全选标识，如果全选则处理所有表，否则仅处理选择的表
+          await sync_datasource_tables(dsId, tables, isSelectAll.value)
         } catch (syncErr) {
           console.error('同步表列表失败:', syncErr)
+          // 即使同步失败，也提示用户数据源已创建
+          window.$ModalMessage.warning('数据源已保存，但同步表列表时出现错误，请稍后手动同步')
         }
       }
 
@@ -395,7 +615,11 @@ const handleSave = async () => {
     }
   } catch (error) {
     console.error('保存数据源失败:', error)
-    window.$ModalMessage.error('保存数据源失败')
+    if (error instanceof Error && error.name === 'AbortError') {
+      window.$ModalMessage.error('请求超时，请检查网络连接或减少选择的表数量后重试')
+    } else {
+      window.$ModalMessage.error('保存数据源失败')
+    }
   } finally {
     loading.value = false
   }
@@ -635,20 +859,66 @@ watch(() => props.show, (newVal) => {
         class="step-content"
       >
         <div class="table-selection-header">
-          <n-text>
-            已选择 <span class="highlight">{{ selectedTables.length }}</span> / {{ tableList.length }} 个表
-          </n-text>
-          <n-button
+          <div class="selection-info">
+            <n-text>
+              已选择 <span class="highlight">{{ selectedTables.length }}</span> / {{ tableList.length }} 个表
+              <span v-if="searchKeyword.trim()">
+                （筛选后: {{ filteredTableList.length }} 个）
+              </span>
+              <span v-if="isSelectAll" class="select-all-badge">
+                （全选模式）
+              </span>
+            </n-text>
+            <n-text
+              v-if="selectedTables.length > 0"
+              class="estimated-time"
+            >
+              预计处理时间：{{ formatEstimatedTime(calculateEstimatedTime(selectedTables.length)) }}
+            </n-text>
+          </div>
+          <div class="header-actions">
+            <n-button
+              v-if="displayedTableList.length < filteredTableList.length"
+              size="small"
+              secondary
+              @click="handleSelectDisplayed"
+            >
+              {{ isDisplayedAllSelected ? '取消当前显示' : '全选当前显示' }}
+            </n-button>
+            <n-button
+              size="small"
+              secondary
+              @click="handleSelectAll"
+            >
+              {{ isAllSelected ? '取消全选' : '全选筛选' }}
+            </n-button>
+          </div>
+        </div>
+
+        <!-- 搜索框 -->
+        <div class="table-search-wrapper">
+          <n-input
+            v-model:value="searchKeyword"
+            placeholder="搜索表名或注释..."
+            clearable
             size="small"
-            secondary
-            @click="handleSelectAll"
           >
-            {{ isAllSelected ? '取消全选' : '全选' }}
-          </n-button>
+            <template #prefix>
+              <n-icon>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
+              </n-icon>
+            </template>
+          </n-input>
         </div>
 
         <n-spin :show="tableListLoading">
-          <div class="table-list-wrapper">
+          <div
+            ref="tableListScrollRef"
+            class="table-list-wrapper"
+          >
             <n-checkbox-group v-model:value="selectedTables">
               <n-grid
                 :x-gap="12"
@@ -656,7 +926,7 @@ watch(() => props.show, (newVal) => {
                 :cols="2"
               >
                 <n-grid-item
-                  v-for="table in tableList"
+                  v-for="table in displayedTableList"
                   :key="table.tableName"
                 >
                   <div class="table-item">
@@ -680,6 +950,42 @@ watch(() => props.show, (newVal) => {
               v-if="tableList.length === 0"
               description="未找到数据表"
             />
+            <n-empty
+              v-else-if="filteredTableList.length === 0"
+              description="未找到匹配的表"
+            />
+
+            <!-- 加载更多提示 -->
+            <div
+              v-if="canLoadMore && !isLoadingMore"
+              class="load-more-tip"
+            >
+              <n-text depth="3">
+                滚动到底部加载更多（已显示 {{ displayedTableList.length }} / {{ filteredTableList.length }}）
+              </n-text>
+            </div>
+
+            <!-- 加载中提示 -->
+            <div
+              v-if="isLoadingMore"
+              class="loading-more"
+            >
+              <n-spin size="small">
+                <template #description>
+                  加载更多表中...
+                </template>
+              </n-spin>
+            </div>
+
+            <!-- 已加载全部提示 -->
+            <div
+              v-if="!canLoadMore && filteredTableList.length > 0"
+              class="load-complete"
+            >
+              <n-text depth="3">
+                已显示全部 {{ filteredTableList.length }} 张表
+              </n-text>
+            </div>
           </div>
         </n-spin>
       </div>
@@ -721,6 +1027,7 @@ watch(() => props.show, (newVal) => {
             v-if="currentStep === 2"
             type="primary"
             :loading="loading"
+            :disabled="loading"
             @click="handleSave"
           >
             保存
@@ -754,16 +1061,43 @@ watch(() => props.show, (newVal) => {
   background: #f9fafb;
   border-radius: 8px;
 
+  .selection-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .estimated-time {
+      font-size: 12px;
+      color: #909399;
+    }
+  }
+
   .highlight {
     color: #18a058;
     font-weight: 600;
   }
+
+  .select-all-badge {
+    color: #2080f0;
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.table-search-wrapper {
+  margin-bottom: 16px;
 }
 
 .table-list-wrapper {
   max-height: 400px;
   overflow-y: auto;
   padding: 4px;
+  min-height: 200px;
 
   .table-item {
     padding: 8px;
@@ -797,6 +1131,14 @@ watch(() => props.show, (newVal) => {
       }
     }
   }
+}
+
+.load-more-tip,
+.loading-more,
+.load-complete {
+  text-align: center;
+  padding: 16px;
+  margin-top: 8px;
 }
 
 .modal-actions {

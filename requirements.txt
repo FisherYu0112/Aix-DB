@@ -22,7 +22,8 @@ bracex==2.6
 bs4==0.0.2
 build==1.3.0
 certifi==2025.11.12
-cffi==2.0.0
+# cffi==2.0.0  # 已移除：cffi 不支持 PyPy，作为其他库的传递依赖自动处理
+# cffi 是 cryptography, argon2-cffi 等库的传递依赖，会自动安装
 charset-normalizer==3.4.4
 chromadb==1.3.5
 ciso8601==2.3.3
@@ -32,7 +33,8 @@ clickhouse-driver==0.2.10
 clickhouse-sqlalchemy==0.3.2
 cloudpickle==3.1.2
 cobble==0.1.4
-colorama==0.4.6
+# colorama==0.4.6  # 已移除：colorama 只在 Windows 上安装，作为其他库的可选依赖自动处理
+# colorama 是 click, coloredlogs 等库的可选依赖，在 Windows 上会自动安装
 coloredlogs==15.0.1
 colorlog==6.10.1
 contourpy==1.3.3
@@ -54,7 +56,8 @@ filelock==3.20.0
 filetype==1.2.0
 flatbuffers==25.9.23
 fonttools==4.60.1
-forbiddenfruit==0.1.4
+# forbiddenfruit==0.1.4  # 已移除：forbiddenfruit 只在 CPython 上支持，作为传递依赖自动处理
+# forbiddenfruit 是某些库的传递依赖，会自动安装，代码中没有直接使用
 frozendict==2.4.7
 frozenlist==1.8.0
 fsspec==2025.10.0
@@ -65,10 +68,12 @@ googleapis-common-protos==1.72.0
 grpcio==1.76.0
 grpcio-tools==1.75.1
 h11==0.16.0
-hf-xet==1.2.0
+# hf-xet==1.2.0  # 已移除：hf-xet 只在特定架构上支持（aarch64, amd64, arm64, x86_64）
+# hf-xet 作为 huggingface-hub 的可选依赖，在支持的架构上会自动安装，代码中没有直接使用
 html5tagger==1.3.0
 httpcore==1.0.9
-httptools==0.7.1
+# httptools==0.7.1  # 已移除：httptools 在 Windows 上可能有编译问题，作为 Sanic 的依赖自动处理
+# httptools 作为 Sanic 的依赖会自动安装，如果安装失败，Sanic 会回退到标准实现
 httpx==0.28.1
 httpx-sse==0.4.3
 huggingface-hub==0.36.0
@@ -154,7 +159,8 @@ opentelemetry-proto==1.38.0
 opentelemetry-sdk==1.38.0
 opentelemetry-semantic-conventions==0.59b0
 oracledb==3.4.1
-orjson==3.11.4
+# orjson==3.11.4  # 已移除：orjson 不支持 PyPy，作为 langsmith 的可选依赖自动处理
+# orjson 作为 langsmith 的可选依赖，在非 PyPy 平台会自动安装，代码中没有直接使用
 ormsgpack==1.12.0
 overrides==7.7.0
 packaging==25.0
@@ -177,7 +183,8 @@ py2neo==2021.2.4
 pyasn1==0.6.1
 pyasn1-modules==0.4.2
 pybase64==1.4.2
-pycparser==2.23
+# pycparser==2.23  # 已移除：pycparser 不支持 PyPy，作为 cffi 的传递依赖自动处理
+# pycparser 是 cffi 的传递依赖，会自动安装
 pycryptodome==3.23.0
 pydantic==2.12.4
 pydantic-core==2.41.5
@@ -252,11 +259,13 @@ typing-inspect==0.9.0
 typing-inspection==0.4.2
 tzdata==2025.2
 tzlocal==5.3.1
-ujson==5.11.0
+# ujson==5.11.0  # 已移除：ujson 不支持 Windows（除非使用 WSL），Sanic 会自动处理
+# ujson 作为 Sanic 的可选依赖，在非 Windows 平台会自动安装，代码使用标准 json 模块
 urllib3==2.5.0
 uuid-utils==0.13.0
 uvicorn==0.38.0
-uvloop==0.22.1
+# uvloop==0.22.1  # 已移除：uvloop 不支持 Windows（除非使用 WSL），Sanic 会自动处理
+# uvloop 作为 Sanic 的可选依赖，在非 Windows 平台会自动安装
 watchdog==6.0.0
 watchfiles==1.1.1
 wcmatch==10.1

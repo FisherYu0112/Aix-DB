@@ -3,7 +3,8 @@ API 请求和响应 Schema 定义
 用于 Swagger 文档生成
 """
 
-from typing import List, Optional, Any, Dict, Generic, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
+
 from pydantic import BaseModel, Field
 
 
@@ -27,7 +28,9 @@ def get_schema(model: type[BaseModel]) -> dict:
                             # 递归解析引用的模型（深拷贝避免修改原对象）
                             import copy
 
-                            resolved = resolve_refs(copy.deepcopy(defs_dict[model_name]), defs_dict)
+                            resolved = resolve_refs(
+                                copy.deepcopy(defs_dict[model_name]), defs_dict
+                            )
                             # 合并其他属性（如 description, title 等）
                             other_props = {k: v for k, v in obj.items() if k != "$ref"}
                             if other_props and isinstance(resolved, dict):
@@ -139,6 +142,9 @@ class SyncTablesRequest(BaseModel):
     """同步表请求"""
 
     tables: List[Dict[str, Any]] = Field(default_factory=list, description="表列表")
+    is_select_all: Optional[bool] = Field(
+        default=False, description="是否全选（用于判断是全选还是部分选择）"
+    )
 
 
 class SyncTablesResponse(BaseResponse):
@@ -263,7 +269,9 @@ class TableRelationRequest(BaseModel):
     """保存表关系请求"""
 
     ds_id: int = Field(description="数据源ID")
-    relations: List[Dict[str, Any]] = Field(default_factory=list, description="表关系列表")
+    relations: List[Dict[str, Any]] = Field(
+        default_factory=list, description="表关系列表"
+    )
 
 
 class TableRelationResponse(BaseResponse):
@@ -350,7 +358,9 @@ class QueryUserRecordListRequest(PaginationParams):
 class QueryUserRecordListResponse(BaseResponse):
     """查询用户对话历史列表响应（简化版）"""
 
-    data: PaginatedResponse[ConversationHistoryListItem] = Field(description="对话历史列表和总数")
+    data: PaginatedResponse[ConversationHistoryListItem] = Field(
+        description="对话历史列表和总数"
+    )
 
 
 class DeleteUserRecordRequest(BaseModel):
@@ -586,12 +596,16 @@ class PermissionItem(BaseModel):
     id: Optional[int] = Field(None, description="规则ID")
     name: str = Field(description="规则名称")
     description: Optional[str] = Field(None, description="描述")
-    permission_list: Optional[List[Dict[str, Any]]] = Field(None, description="权限列表")
+    permission_list: Optional[List[Dict[str, Any]]] = Field(
+        None, description="权限列表"
+    )
     user_list: Optional[List[int]] = Field(None, description="用户ID列表")
     white_list_user: Optional[List[int]] = Field(None, description="白名单用户")
     enable: bool = Field(True, description="是否启用")
     create_time: Optional[str] = Field(None, description="创建时间")
-    permissions: Optional[List[Dict[str, Any]]] = Field(None, description="前端用权限列表")
+    permissions: Optional[List[Dict[str, Any]]] = Field(
+        None, description="前端用权限列表"
+    )
     users: Optional[List[int]] = Field(None, description="前端用用户列表")
 
 
@@ -602,7 +616,9 @@ class PermissionListResponse(BaseResponse):
 class SavePermissionRequest(BaseModel):
     id: Optional[int] = Field(None, description="规则ID")
     name: str = Field(description="规则名称")
-    permissions: List[Dict[str, Any]] = Field(default_factory=list, description="权限配置")
+    permissions: List[Dict[str, Any]] = Field(
+        default_factory=list, description="权限配置"
+    )
     users: List[int] = Field(default_factory=list, description="用户ID列表")
 
 
@@ -690,4 +706,5 @@ class DeleteDataTrainingRequest(BaseModel):
 
 class EnableDataTrainingRequest(BaseModel):
     id: int = Field(description="ID")
+    enabled: bool = Field(description="是否启用")
     enabled: bool = Field(description="是否启用")

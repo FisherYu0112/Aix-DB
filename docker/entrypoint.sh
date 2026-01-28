@@ -72,6 +72,9 @@ export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1
 export OTEL_PYTHON_CONTEXT=contextvars_context
 export SANIC_WORKER_STATE_TTL=120
+# 设置 worker 启动超时时间（秒），默认 180 秒
+# 在资源受限环境下（如 2CPU 8GB），worker 启动可能需要更长时间
+export SANIC_WORKER_STARTUP_TIMEOUT=${SANIC_WORKER_STARTUP_TIMEOUT:-180}
 
 echo "Starting supervisord..."
 # 启动 supervisord

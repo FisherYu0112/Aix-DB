@@ -6,6 +6,12 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 from sanic import Sanic
 from sanic.response import empty
+from sanic.worker.manager import WorkerManager
+
+# 设置 worker 启动超时时间（单位：0.1秒）
+# 设置为 180 秒（1800 * 0.1秒），允许 workers 有足够时间完成启动
+startup_timeout_seconds = int(os.getenv("SANIC_WORKER_STARTUP_TIMEOUT", 180))
+WorkerManager.THRESHOLD = startup_timeout_seconds * 10  # 转换为 0.1 秒单位
 
 import controllers
 from common.route_utility import autodiscover
@@ -120,7 +126,5 @@ def get_server_config():
 
 
 if __name__ == "__main__":
-    config = get_server_config()
-    app.run(**config)
     config = get_server_config()
     app.run(**config)

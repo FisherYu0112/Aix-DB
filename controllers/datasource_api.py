@@ -8,47 +8,47 @@ from typing import Optional
 from sanic import Blueprint, request
 from sanic_ext import openapi
 
-from services.datasource_service import DatasourceService
-from model.db_connection_pool import get_db_pool
-from common.res_decorator import async_json_resp
 from common.exception import MyException
-from constants.code_enum import SysCodeEnum
-from services.user_service import get_user_info
-from common.permission_util import check_admin_permission
 from common.param_parser import parse_params
+from common.permission_util import check_admin_permission
+from common.res_decorator import async_json_resp
+from constants.code_enum import SysCodeEnum
+from model.db_connection_pool import get_db_pool
 from model.schemas import (
-    DatasourceListResponse,
-    CreateDatasourceRequest,
-    CreateDatasourceResponse,
-    UpdateDatasourceRequest,
-    UpdateDatasourceResponse,
-    SyncTablesRequest,
-    SyncTablesResponse,
-    DeleteDatasourceResponse,
-    DatasourceDetailResponse,
     CheckDatasourceRequest,
     CheckDatasourceResponse,
-    GetTablesByConfRequest,
-    GetTablesByConfResponse,
-    GetFieldsByConfRequest,
-    GetFieldsByConfResponse,
-    TableListResponse,
-    FieldListResponse,
-    SaveTableRequest,
-    SaveTableResponse,
-    SaveFieldRequest,
-    SaveFieldResponse,
-    PreviewDataRequest,
-    PreviewDataResponse,
-    TableRelationRequest,
-    TableRelationResponse,
-    GetTableRelationResponse,
-    GetNeo4jRelationResponse,
+    CreateDatasourceRequest,
+    CreateDatasourceResponse,
     DatasourceAuthRequest,
     DatasourceAuthResponse,
+    DatasourceDetailResponse,
+    DatasourceListResponse,
+    DeleteDatasourceResponse,
+    FieldListResponse,
     GetAuthorizedUsersResponse,
+    GetFieldsByConfRequest,
+    GetFieldsByConfResponse,
+    GetNeo4jRelationResponse,
+    GetTableRelationResponse,
+    GetTablesByConfRequest,
+    GetTablesByConfResponse,
+    PreviewDataRequest,
+    PreviewDataResponse,
+    SaveFieldRequest,
+    SaveFieldResponse,
+    SaveTableRequest,
+    SaveTableResponse,
+    SyncTablesRequest,
+    SyncTablesResponse,
+    TableListResponse,
+    TableRelationRequest,
+    TableRelationResponse,
+    UpdateDatasourceRequest,
+    UpdateDatasourceResponse,
     get_schema,
 )
+from services.datasource_service import DatasourceService
+from services.user_service import get_user_info
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,9 @@ async def get_datasource_list(req: request.Request):
         with db_pool.get_session() as session:
 
             user_info = await get_user_info(req)
-            datasources = DatasourceService.get_datasource_list(session, user_info["id"])
+            datasources = DatasourceService.get_datasource_list(
+                session, user_info["id"]
+            )
 
             result = []
             for ds in datasources:
@@ -84,8 +86,9 @@ async def get_datasource_list(req: request.Request):
                 configuration = ds.configuration
                 if configuration:
                     try:
-                        from common.datasource_util import DatasourceConfigUtil
                         import json
+
+                        from common.datasource_util import DatasourceConfigUtil
 
                         config_dict = DatasourceConfigUtil.decrypt_config(configuration)
                         configuration = json.dumps(config_dict)
@@ -116,7 +119,9 @@ async def get_datasource_list(req: request.Request):
                         "num": ds.num,
                         "host": config_dict["host"],
                         "database": config_dict["database"],
-                        "create_time": ds.create_time.isoformat() if ds.create_time else None,
+                        "create_time": (
+                            ds.create_time.isoformat() if ds.create_time else None
+                        ),
                     }
                 )
 
@@ -159,14 +164,16 @@ async def create_datasource(req: request.Request, body: CreateDatasourceRequest)
     """
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         data = body.model_dump()
 
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
             user_info = await get_user_info(req)
-            datasource = DatasourceService.create_datasource(session, data, user_info["id"])
+            datasource = DatasourceService.create_datasource(
+                session, data, user_info["id"]
+            )
 
             return {
                 "id": datasource.id,
@@ -212,7 +219,7 @@ async def update_datasource(req: request.Request, body: UpdateDatasourceRequest)
     """
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         data = body.model_dump()
         ds_id = data.get("id")
@@ -275,16 +282,23 @@ async def sync_tables(req: request.Request, ds_id: int, body: SyncTablesRequest)
     """
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         data = body.tables if body.tables else []
+        is_select_all = getattr(body, "is_select_all", False)  # 获取是否全选标志
 
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
-            success = DatasourceService.sync_tables(session, ds_id, data)
+            success = DatasourceService.sync_tables(session, ds_id, data, is_select_all)
             if not success:
                 raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
-            return {"message": "同步成功"}
+
+            # 返回同步结果，包含选择的表数量信息
+            return {
+                "message": "同步成功",
+                "table_count": len(data),
+                "is_select_all": is_select_all,
+            }
     except MyException:
         raise
     except Exception as e:
@@ -318,7 +332,7 @@ async def delete_datasource(req: request.Request, ds_id: int):
     """删除数据源（仅管理员）"""
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
@@ -369,8 +383,9 @@ async def get_datasource(req: request.Request, ds_id: int):
             configuration = datasource.configuration
             if configuration:
                 try:
-                    from common.datasource_util import DatasourceConfigUtil
                     import json
+
+                    from common.datasource_util import DatasourceConfigUtil
 
                     config_dict = DatasourceConfigUtil.decrypt_config(configuration)
                     configuration = json.dumps(config_dict)
@@ -404,13 +419,19 @@ async def get_datasource(req: request.Request, ds_id: int):
                 "status": datasource.status,
                 "num": datasource.num,
                 "table_relation": datasource.table_relation,
-                "create_time": datasource.create_time.isoformat() if datasource.create_time else None,
+                "create_time": (
+                    datasource.create_time.isoformat()
+                    if datasource.create_time
+                    else None
+                ),
             }
     except MyException:
         raise
     except Exception as e:
         logger.error(f"获取数据源详情失败: {e}", exc_info=True)
-        raise MyException(SysCodeEnum.SYSTEM_ERROR.value, f"获取数据源详情失败: {str(e)}")
+        raise MyException(
+            SysCodeEnum.SYSTEM_ERROR.value, f"获取数据源详情失败: {str(e)}"
+        )
 
 
 @bp.post("/check")
@@ -449,7 +470,9 @@ async def check_datasource(req: request.Request, body: CheckDatasourceRequest):
 
         # 如果提供了配置信息，直接测试
         if ds_type and configuration:
-            is_connected, error_message = DatasourceService.check_connection_by_config(ds_type, configuration)
+            is_connected, error_message = DatasourceService.check_connection_by_config(
+                ds_type, configuration
+            )
             return {"connected": is_connected, "error_message": error_message}
 
         # 否则根据ID获取数据源测试
@@ -793,7 +816,9 @@ async def preview_data(req: request.Request, body: PreviewDataRequest):
 
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
-            preview_result = DatasourceService.preview_table_data(session, body.ds_id, table, fields)
+            preview_result = DatasourceService.preview_table_data(
+                session, body.ds_id, table, fields
+            )
             return preview_result
     except MyException:
         raise
@@ -836,7 +861,9 @@ async def save_table_relation(req: request.Request, body: TableRelationRequest):
 
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
-            success = DatasourceService.save_table_relation(session, body.ds_id, relation_data)
+            success = DatasourceService.save_table_relation(
+                session, body.ds_id, relation_data
+            )
             if not success:
                 raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
 
@@ -940,7 +967,7 @@ async def get_authorized_users(req: request.Request, datasource_id: int):
     """
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
@@ -948,7 +975,7 @@ async def get_authorized_users(req: request.Request, datasource_id: int):
             datasource = DatasourceService.get_datasource_by_id(session, datasource_id)
             if not datasource:
                 raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
-            
+
             # 获取已授权的用户ID列表
             user_ids = DatasourceService.get_authorized_users(session, datasource_id)
             return user_ids
@@ -990,29 +1017,31 @@ async def authorize_datasource(req: request.Request, body: DatasourceAuthRequest
     """
     # 检查管理员权限
     await check_admin_permission(req)
-    
+
     try:
         datasource_id = body.datasource_id
         user_ids = body.user_ids
-        
+
         if not datasource_id:
             raise MyException(SysCodeEnum.PARAM_ERROR, "缺少数据源ID")
         # 允许空列表，用于清空授权
         if user_ids is None:
             raise MyException(SysCodeEnum.PARAM_ERROR, "缺少用户ID列表")
-        
+
         db_pool = get_db_pool()
         with db_pool.get_session() as session:
             # 检查数据源是否存在
             datasource = DatasourceService.get_datasource_by_id(session, datasource_id)
             if not datasource:
                 raise MyException(SysCodeEnum.DATA_NOT_FOUND, "数据源不存在")
-            
+
             # 执行授权
-            success = DatasourceService.authorize_datasource(session, datasource_id, user_ids)
+            success = DatasourceService.authorize_datasource(
+                session, datasource_id, user_ids
+            )
             if not success:
                 raise MyException(SysCodeEnum.SYSTEM_ERROR, "授权失败")
-            
+
             return {"message": "授权成功"}
     except MyException:
         raise
