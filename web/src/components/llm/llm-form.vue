@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { FormInst, FormRules } from 'naive-ui'
 import { reactive, ref, watch } from 'vue'
-import { add_model, check_model_status, fetch_base_model_list, fetch_model_detail, update_model } from '@/api/aimodel'
+import { add_model, check_model_status, fetch_model_detail, update_model } from '@/api/aimodel'
 
 interface Props {
   show: boolean
@@ -18,8 +18,6 @@ const emit = defineEmits(['update:show', 'success'])
 const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
 const testing = ref(false)
-const baseModelOptions = ref<{ label: string, value: string }[]>([])
-const loadingBaseModels = ref(false)
 
 const formData = reactive({
   name: '',
@@ -62,7 +60,7 @@ const rules: FormRules = {
   model_type: [{ required: true, message: '请选择模型类型', trigger: 'change', type: 'number' }],
   base_model: [{ required: true, message: '请输入基础模型名称', trigger: 'blur' }],
   api_domain: [{ required: true, message: '请输入API域名', trigger: 'blur' }],
-  api_key: [{ required: true, message: '请输入API Key', trigger: 'blur' }],
+  // API Key 不是必填项，某些模型（如本地 Ollama）不需要 API Key
 }
 
 // Watch supplier change to auto-fill defaults
@@ -138,43 +136,21 @@ const handleTest = async () => {
   testing.value = true
   try {
     const res = await check_model_status(formData)
-    // Response handling might differ based on API implementation
-    // check_llm returns streaming response, but maybe I'll simplify to JSON for now
-    window.$ModalMessage.success('连接成功')
-  } catch (e) {
-    window.$ModalMessage.error('连接失败')
+    // 处理响应结果 - 后端返回格式: {code: 200, msg: 'ok', data: {success: true, message: '...'}}
+    const result = res?.data || res
+    if (result && result.success) {
+      window.$ModalMessage.success(result.message || '连接成功')
+    } else {
+      window.$ModalMessage.error(result?.message || res?.msg || '连接失败')
+    }
+  } catch (e: any) {
+    const errorMsg = e?.msg || e?.message || '连接失败'
+    window.$ModalMessage.error(errorMsg)
   } finally {
     testing.value = false
   }
 }
 
-const handleFetchModels = async () => {
-  // Only fetch if we have enough info (supplier)
-  // For OpenAI/DeepSeek we need API Key, for Ollama we just need domain (or default)
-
-  // Clear existing options or keep them? Maybe clear if supplier changed?
-  // For now, let's just fetch and update
-
-  loadingBaseModels.value = true
-  try {
-    const res = await fetch_base_model_list({
-      supplier: formData.supplier,
-      api_key: formData.api_key,
-      api_domain: formData.api_domain,
-    })
-
-    if (res.data && Array.isArray(res.data)) {
-      baseModelOptions.value = res.data.map((m: string) => ({ label: m, value: m }))
-    } else if (Array.isArray(res)) {
-      baseModelOptions.value = res.map((m: string) => ({ label: m, value: m }))
-    }
-  } catch (e) {
-    console.error(e)
-    // Don't show error to user aggressively, just fail silently or log
-  } finally {
-    loadingBaseModels.value = false
-  }
-}
 
 const handleSave = async () => {
   formRef.value?.validate(async (errors) => {
@@ -255,14 +231,9 @@ const onCreateConfig = () => {
         label="基础模型"
         path="base_model"
       >
-        <n-select
+        <n-input
           v-model:value="formData.base_model"
-          :options="baseModelOptions"
-          :loading="loadingBaseModels"
-          filterable
-          tag
-          placeholder="请选择或输入基础模型"
-          @focus="handleFetchModels"
+          placeholder="请输入基础模型名称，如：gpt-4、qwen3-max 等"
         />
       </n-form-item>
       <n-form-item

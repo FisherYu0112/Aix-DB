@@ -29,10 +29,19 @@ description: 用于发现和理解数据库结构、表、列和关系
 - **主键** - 行的唯一标识符
 - **外键** - 与其他表的关系
 
-### 3. 映射关系
-识别表之间的连接方式：
-- 查找以 "Id" 结尾的列（例如，CustomerId, ArtistId）
-- 外键链接到其他表的主键
+### 3. 获取表关系
+使用 `sql_db_table_relationship` 工具获取表之间的外键/关联关系：
+- **关联字段** - 两表通过哪些字段关联
+- **JOIN 条件** - 返回格式如 `t_orders.customer_id = t_customers.id`
+
+示例调用：
+```
+sql_db_table_relationship("t_orders, t_customers, t_products")
+```
+
+如果未配置表关系，可以通过以下方式推断：
+- 查找以 "Id" 或 "_id" 结尾的列（例如，customer_id, product_id）
+- 外键列名通常对应另一个表的主键
 - 记录父子关系
 
 ### 4. 回答问题
@@ -54,6 +63,19 @@ description: 用于发现和理解数据库结构、表、列和关系
 3. Invoice - 客户购买记录
 4. InvoiceLine - 发票中的单个项目
 ...
+```
+
+## 示例："这些表之间有什么关系？"
+
+**步骤 1：** 使用 `sql_db_table_relationship("Customer, Invoice, InvoiceLine")`
+
+**响应：**
+```
+表之间的关系如下：
+  • Invoice.CustomerId = Customer.Id
+  • InvoiceLine.InvoiceId = Invoice.Id
+
+✅ 表关系已获取完成。
 ```
 
 ## 示例："Customer 表有哪些列？"
@@ -111,7 +133,8 @@ Customer 表包含以下列：
 
 ### 模式 3：映射关系
 "客户如何与发票关联？"
-→ 追踪外键链：Customer → Invoice → InvoiceLine
+→ 使用 `sql_db_table_relationship("Customer, Invoice, InvoiceLine")` 获取关系
+→ 返回如：`Invoice.CustomerId = Customer.Id`, `InvoiceLine.InvoiceId = Invoice.Id`
 
 ## 提示
 

@@ -23,7 +23,32 @@
   <a href="./README.md">简体中文</a> | <a href="./README_en.md">English</a>
 </p>
 
----
+<p align="center">
+  <b>🚀 Looking for Enterprise AI Solutions?</b>
+</p>
+
+<p align="center">
+  <a href="http://www.aixhub.top/"><img src="https://img.shields.io/badge/🤖_AiX--Bot-8A2BE2?style=for-the-badge&logoColor=white" alt="AiX-Bot" /></a>
+</p>
+
+<p align="center">
+  Our commercial product with powerful enterprise features:<br/>
+  Private Deployment · Custom Development · Dedicated Support · Multi-scenario AI Applications
+</p>
+
+<p align="center">
+  <b>👇 Click to Experience Now 👇</b>
+</p>
+
+<p align="center">
+  <a href="YOUR_CHAT_URL"><img src="https://img.shields.io/badge/💬_AI_Chat-4A90D9?style=for-the-badge" alt="AI Chat" /></a>
+  <a href="YOUR_DATA_URL"><img src="https://img.shields.io/badge/📊_Data_Q&A-10B981?style=for-the-badge" alt="Data Q&A" /></a>
+  <a href="http://www.aixhub.top:5006"><img src="https://img.shields.io/badge/📈_Report_Gen-F59E0B?style=for-the-badge" alt="Report Generation" /></a>
+</p>
+
+<p align="center">
+  <sub>💼 For business inquiries, please contact us via WeChat (note "Business Cooperation") | <a href="http://www.aixhub.top/">Contact Us</a></sub>
+</p>
 
 Aix-DB is built on the **LangChain/LangGraph** framework, combined with **MCP Skills** multi-agent collaboration architecture, enabling end-to-end transformation from natural language to data insights.
 
@@ -116,6 +141,10 @@ docker run -d \
   -e SERVER_HOST=0.0.0.0 \
   -e SERVER_PORT=8088 \
   -e SERVER_WORKERS=2 \
+  -e LANGFUSE_TRACING_ENABLED=false \
+  -e LANGFUSE_SECRET_KEY= \
+  -e LANGFUSE_PUBLIC_KEY= \
+  -e LANGFUSE_BASE_URL= \
   -p 18080:80 \
   -p 18088:8088 \
   -p 15432:5432 \
@@ -132,11 +161,14 @@ docker run -d \
   crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/aix-db:1.2.2
 ```
 
+> **Note**: To enable Langfuse full-chain tracing, set `LANGFUSE_TRACING_ENABLED=true` and configure the corresponding keys and URL.
+
 ### Deploy with Docker Compose
 
 ```bash
 git clone https://github.com/apconw/Aix-DB.git
 cd Aix-DB/docker
+cp .env.template .env  # Copy env template, modify as needed
 docker-compose up -d
 ```
 

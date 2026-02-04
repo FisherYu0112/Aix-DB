@@ -217,9 +217,21 @@ class DatasourceConnectionUtil:
 
                 elif ds_type in ("doris", "starrocks"):
                     # Apache Doris / StarRocks（使用 MySQL 协议）
-                    with pymysql.connect(user=username, passwd=password, host=host,
-                                         port=port, db=database, connect_timeout=timeout,
-                                         read_timeout=timeout, **extra_config) as conn:
+                    # 使用优化的连接参数以提高连接稳定性
+                    connect_timeout = max(timeout, 60)  # 至少 60 秒连接超时
+                    with pymysql.connect(
+                        user=username, 
+                        passwd=password, 
+                        host=host,
+                        port=port, 
+                        db=database, 
+                        connect_timeout=connect_timeout,
+                        read_timeout=timeout,
+                        write_timeout=timeout,
+                        charset='utf8mb4',
+                        autocommit=True,
+                        **extra_config
+                    ) as conn:
                         with conn.cursor() as cursor:
                             cursor.execute('SELECT 1')
                     return True, ""
@@ -444,9 +456,21 @@ class DatasourceConnectionUtil:
                                 })
 
                 elif ds_type in ("doris", "starrocks"):
-                    with pymysql.connect(user=username, passwd=password, host=host,
-                                         port=port, db=database, connect_timeout=timeout,
-                                         read_timeout=timeout, **extra_config) as conn:
+                    # 使用优化的连接参数以提高连接稳定性
+                    connect_timeout = max(timeout, 60)  # 至少 60 秒连接超时
+                    with pymysql.connect(
+                        user=username, 
+                        passwd=password, 
+                        host=host,
+                        port=port, 
+                        db=database, 
+                        connect_timeout=connect_timeout,
+                        read_timeout=timeout,
+                        write_timeout=timeout,
+                        charset='utf8mb4',
+                        autocommit=True,
+                        **extra_config
+                    ) as conn:
                         with conn.cursor() as cursor:
                             cursor.execute(sql, (sql_param,))
                             for row in cursor.fetchall():
@@ -726,9 +750,21 @@ class DatasourceConnectionUtil:
                                 })
 
                 elif ds_type in ("doris", "starrocks"):
-                    with pymysql.connect(user=username, passwd=password, host=host,
-                                         port=port, db=database, connect_timeout=timeout,
-                                         read_timeout=timeout, **extra_config) as conn:
+                    # 使用优化的连接参数以提高连接稳定性
+                    connect_timeout = max(timeout, 60)  # 至少 60 秒连接超时
+                    with pymysql.connect(
+                        user=username, 
+                        passwd=password, 
+                        host=host,
+                        port=port, 
+                        db=database, 
+                        connect_timeout=connect_timeout,
+                        read_timeout=timeout,
+                        write_timeout=timeout,
+                        charset='utf8mb4',
+                        autocommit=True,
+                        **extra_config
+                    ) as conn:
                         with conn.cursor() as cursor:
                             params = (p1, p2) if p2 else (p1,)
                             cursor.execute(sql, params)
@@ -873,9 +909,25 @@ class DatasourceConnectionUtil:
                             return data
 
                 elif ds_type in ("doris", "starrocks"):
-                    with pymysql.connect(user=username, passwd=password, host=host,
-                                         port=port, db=database, connect_timeout=timeout,
-                                         read_timeout=timeout, **extra_config) as conn:
+                    # StarRocks/Doris 连接参数优化：
+                    # 1. 增加 connect_timeout 到至少 60 秒（连接建立可能需要更长时间）
+                    # 2. 添加 write_timeout 防止写入超时
+                    # 3. 设置 charset 确保编码正确
+                    # 4. 设置 autocommit 提高兼容性
+                    connect_timeout = max(timeout, 60)  # 至少 60 秒连接超时
+                    with pymysql.connect(
+                        user=username, 
+                        passwd=password, 
+                        host=host,
+                        port=port, 
+                        db=database, 
+                        connect_timeout=connect_timeout,
+                        read_timeout=timeout,
+                        write_timeout=timeout,
+                        charset='utf8mb4',
+                        autocommit=True,
+                        **extra_config
+                    ) as conn:
                         with conn.cursor() as cursor:
                             cursor.execute(sql)
                             rows = cursor.fetchall()

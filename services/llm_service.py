@@ -139,7 +139,7 @@ class LLMRequest:
                     dify_service_url,
                     headers=headers,
                     json=body_params,
-                    timeout=aiohttp.ClientTimeout(total=60 * 10),  # 等待10分钟超时
+                    timeout=aiohttp.ClientTimeout(total=60 * 18),  # 等待18分钟超时，与前端和Nginx保持一致
                 ) as response:
                     logging.info(f"llm response status: {response.status}")
                     if response.status == 200:

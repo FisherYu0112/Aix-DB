@@ -18,7 +18,7 @@ export async function createOllama3Stylized(text, qa_type, uuid, chat_id, file_l
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
     controller.abort()
-  }, 10 * 60 * 1000) // 10分钟超时 (10 * 60 * 1000 毫秒)
+  }, 18 * 60 * 1000) // 18分钟超时 (18 * 60 * 1000 毫秒)，给HTML生成等长时间操作更多时间
 
   // // 文件问答传文件url
   // if (text.includes('表格数据')) {

@@ -1,15 +1,20 @@
 import json
+import os
 
 from model.db_connection_pool import get_db_pool
 from model.db_models import TAiModel
 
 pool = get_db_pool()
 
+# 默认超时时间：18分钟（1080秒），与前端保持一致
+DEFAULT_LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 18 * 60))
 
-def get_llm(temperature=0.75):
+
+def get_llm(temperature=0.75, timeout=None):
     """
     获取LLM模型
     :param temperature: 温度参数
+    :param timeout: 超时时间（秒），默认使用环境变量 LLM_TIMEOUT 或 18分钟
     :return: LLM模型实例
     """
     with pool.get_session() as session:
@@ -41,6 +46,15 @@ def get_llm(temperature=0.75):
         except ValueError:
             temperature = 0.75
 
+        # 确定超时时间：优先使用参数，其次环境变量，最后使用默认值
+        if timeout is None:
+            timeout = DEFAULT_LLM_TIMEOUT
+        else:
+            try:
+                timeout = int(timeout)
+            except (ValueError, TypeError):
+                timeout = DEFAULT_LLM_TIMEOUT
+
         # 为了避免在模块加载时就触发第三方依赖（如 OpenTelemetry/LangSmith）的副作用，
         # 对各类模型做统一的延迟导入和降级处理
         def _get_openai():
@@ -60,6 +74,7 @@ def get_llm(temperature=0.75):
                 temperature=temperature,
                 base_url=model_base_url,
                 api_key=model_api_key or "empty",  # Ensure not None
+                timeout=timeout,  # 设置超时时间（秒）
             )
 
         def _get_ollama():
@@ -72,7 +87,12 @@ def get_llm(temperature=0.75):
                 print(f"[WARN] Failed to import ChatOllama, fallback to ChatOpenAI: {e}")
                 return _get_openai()
 
-            return ChatOllama(model=model_name, temperature=temperature, base_url=model_base_url)
+            return ChatOllama(
+                model=model_name,
+                temperature=temperature,
+                base_url=model_base_url,
+                timeout=timeout,  # 设置超时时间（秒）
+            )
 
         # Qwen 也统一走 OpenAI 协议客户端，避免引入 ChatTongyi 及其 LangSmith/OpenTelemetry 依赖
         model_map = {

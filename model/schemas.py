@@ -570,7 +570,7 @@ class AiModelConfigItem(BaseModel):
 
 class AiModelCreator(AiModelItem):
     api_domain: str = Field(description="API域名")
-    api_key: str = Field(description="API Key")
+    api_key: Optional[str] = Field(None, description="API Key（可选，某些模型如本地 Ollama 不需要）")
     config_list: List[AiModelConfigItem] = Field(default=[], description="额外配置列表")
 
 

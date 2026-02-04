@@ -65,6 +65,11 @@ async def add_model(data: dict) -> bool:
         config_list = data.get('config_list', [])
         config_str = json.dumps(config_list)
 
+        # 处理 api_key：空字符串转换为 None
+        api_key = data.get('api_key')
+        if api_key is not None and api_key.strip() == '':
+            api_key = None
+
         new_model = TAiModel(
             name=data['name'],
             base_model=data['base_model'],
@@ -72,7 +77,7 @@ async def add_model(data: dict) -> bool:
             supplier=data.get('supplier', 1),
             protocol=data.get('protocol', 1),
             api_domain=data['api_domain'],
-            api_key=data['api_key'],
+            api_key=api_key,
             config=config_str,
             default_model=is_default,
             status=1,
@@ -102,7 +107,11 @@ async def update_model(model_id: int, data: dict) -> bool:
         if 'api_domain' in data:
             model.api_domain = data['api_domain']
         if 'api_key' in data:
-            model.api_key = data['api_key']
+            # 处理 api_key：空字符串转换为 None
+            api_key = data['api_key']
+            if api_key is not None and api_key.strip() == '':
+                api_key = None
+            model.api_key = api_key
         
         if 'config_list' in data:
             model.config = json.dumps(data['config_list'])
@@ -161,9 +170,83 @@ async def get_default_model() -> Optional[dict]:
         
         return model_to_dict(model)
 
-async def check_llm_status(data: dict) -> bool:
-    # Mock implementation
-    return True
+async def check_llm_status(data: dict) -> dict:
+    """
+    测试模型连接状态
+    :param data: 模型配置数据
+    :return: 测试结果
+    """
+    supplier = data.get('supplier', 1)
+    api_key = data.get('api_key') or ''
+    api_domain = data.get('api_domain', '')
+    base_model = data.get('base_model', '')
+    
+    if not api_domain:
+        return {"success": False, "message": "API 域名不能为空"}
+    
+    try:
+        # Ollama 不需要 API Key
+        if supplier == 3:
+            domain = api_domain
+            if domain.endswith('/v1'):
+                domain = domain[:-3]
+            url = f"{domain}/api/tags"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, timeout=5)
+                resp.raise_for_status()
+                return {"success": True, "message": "连接成功"}
+        
+        # 其他供应商需要 API Key（但某些本地部署可能不需要）
+        # 尝试发送一个简单的请求来测试连接
+        if supplier == 1:  # OpenAI
+            domain = api_domain or "https://api.openai.com/v1"
+            url = f"{domain}/models"
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=10)
+                resp.raise_for_status()
+                return {"success": True, "message": "连接成功"}
+        
+        # vLLM 可能不需要 API Key
+        elif supplier == 4:
+            url = f"{api_domain}/models"
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=5)
+                resp.raise_for_status()
+                return {"success": True, "message": "连接成功"}
+        
+        # 其他供应商（DeepSeek, Qwen, Moonshot, ZhipuAI 等）
+        else:
+            # 尝试使用 OpenAI 兼容协议测试
+            domain = api_domain
+            url = f"{domain}/models" if not domain.endswith('/v1') else f"{domain}/models"
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=10)
+                resp.raise_for_status()
+                return {"success": True, "message": "连接成功"}
+    
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return {"success": False, "message": "API Key 无效或未授权"}
+        elif e.response.status_code == 404:
+            return {"success": False, "message": "API 端点不存在，请检查 API 域名"}
+        else:
+            return {"success": False, "message": f"连接失败: HTTP {e.response.status_code}"}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "连接超时，请检查网络或 API 域名"}
+    except httpx.ConnectError:
+        return {"success": False, "message": "无法连接到服务器，请检查 API 域名"}
+    except Exception as e:
+        logger.error(f"测试模型连接失败: {e}")
+        return {"success": False, "message": f"连接失败: {str(e)}"}
 
 async def fetch_base_models(supplier: int, api_key: str = None, api_domain: str = None) -> List[str]:
     try:
