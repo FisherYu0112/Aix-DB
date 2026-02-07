@@ -127,6 +127,7 @@ const resetStatus = () => {
   htmlReportContent.value = ''
   isCapturingHtml.value = false
   htmlReportReady.value = false
+  pendingDelimiter = ''
   if (typingAnimationFrame) {
     cancelAnimationFrame(typingAnimationFrame)
     typingAnimationFrame = null
@@ -291,8 +292,16 @@ const scrollToBottomIfAtBottom = async () => {
  * 处理 textBuffer 中的 HTML 报告分隔符
  * 将非 HTML 部分输出到 displayText，HTML 部分输出到 htmlReportContent
  */
+/**
+ * 内部挂起缓冲区：存放跨 chunk 的分隔符部分匹配片段。
+ * 仅当新数据到达时才与新 chunk 合并处理，避免无限循环。
+ */
+let pendingDelimiter = ''
+
 const processBufferWithDelimiters = (chunk: string) => {
-  let remaining = chunk
+  // 将之前挂起的部分匹配与新数据拼接
+  let remaining = pendingDelimiter + chunk
+  pendingDelimiter = ''
 
   while (remaining.length > 0) {
     if (isCapturingHtml.value) {
@@ -305,26 +314,22 @@ const processBufferWithDelimiters = (chunk: string) => {
         htmlReportReady.value = true
         remaining = remaining.substring(endIdx + HTML_END_DELIMITER.length)
       } else {
-        // 检查是否有部分匹配结束分隔符（跨 chunk 场景）
-        let partialMatch = false
-        for (let i = 1; i < HTML_END_DELIMITER.length && i <= remaining.length; i++) {
-          const tail = remaining.substring(remaining.length - i)
-          if (HTML_END_DELIMITER.startsWith(tail)) {
-            // 部分匹配，保留尾部不 flush
-            htmlReportContent.value += remaining.substring(0, remaining.length - i)
-            remaining = tail
-            partialMatch = true
+        // 检查尾部是否可能是结束分隔符的前缀（跨 chunk 场景）
+        let partialLen = 0
+        for (let i = Math.min(HTML_END_DELIMITER.length - 1, remaining.length); i >= 1; i--) {
+          if (HTML_END_DELIMITER.startsWith(remaining.substring(remaining.length - i))) {
+            partialLen = i
             break
           }
         }
-        if (!partialMatch) {
-          htmlReportContent.value += remaining
-          remaining = ''
+        if (partialLen > 0) {
+          // 输出安全部分，挂起尾部
+          htmlReportContent.value += remaining.substring(0, remaining.length - partialLen)
+          pendingDelimiter = remaining.substring(remaining.length - partialLen)
         } else {
-          // 将部分匹配放回 textBuffer 等待更多数据
-          textBuffer.value = remaining + textBuffer.value
-          remaining = ''
+          htmlReportContent.value += remaining
         }
+        remaining = ''
       }
     } else {
       // 正常模式，查找开始分隔符
@@ -339,23 +344,21 @@ const processBufferWithDelimiters = (chunk: string) => {
         htmlReportReady.value = false
         remaining = remaining.substring(startIdx + HTML_START_DELIMITER.length)
       } else {
-        // 检查是否有部分匹配开始分隔符
-        let partialMatch = false
-        for (let i = 1; i < HTML_START_DELIMITER.length && i <= remaining.length; i++) {
-          const tail = remaining.substring(remaining.length - i)
-          if (HTML_START_DELIMITER.startsWith(tail)) {
-            // 部分匹配，输出安全部分，保留尾部
-            displayText.value += remaining.substring(0, remaining.length - i)
-            textBuffer.value = tail + textBuffer.value
-            remaining = ''
-            partialMatch = true
+        // 检查尾部是否可能是开始分隔符的前缀
+        let partialLen = 0
+        for (let i = Math.min(HTML_START_DELIMITER.length - 1, remaining.length); i >= 1; i--) {
+          if (HTML_START_DELIMITER.startsWith(remaining.substring(remaining.length - i))) {
+            partialLen = i
             break
           }
         }
-        if (!partialMatch) {
+        if (partialLen > 0) {
+          displayText.value += remaining.substring(0, remaining.length - partialLen)
+          pendingDelimiter = remaining.substring(remaining.length - partialLen)
+        } else {
           displayText.value += remaining
-          remaining = ''
         }
+        remaining = ''
       }
     }
   }
@@ -366,7 +369,10 @@ const processBufferWithDelimiters = (chunk: string) => {
  */
 const runReadBuffer = (readCallback = () => {}, endCallback = () => {}) => {
   if (textBuffer.value.length > 0) {
-    const lengthToExtract = props.isInit || props.isView ? 1000 : 5
+    // HTML 捕获模式下一次性处理所有缓冲数据（无需打字动画），提升吞吐率
+    const lengthToExtract = isCapturingHtml.value
+      ? textBuffer.value.length
+      : (props.isInit || props.isView ? 1000 : 5)
     const nextChunk = textBuffer.value.substring(0, lengthToExtract)
     textBuffer.value = textBuffer.value.substring(lengthToExtract)
     processBufferWithDelimiters(nextChunk)
@@ -408,6 +414,16 @@ const showText = () => {
           if (dataType && dataType === 't04') {
             currentChartType.value = businessStore.writerList.data.template_code
           }
+        }
+
+        // 流结束时，将挂起的分隔符部分匹配作为普通文本输出
+        if (pendingDelimiter) {
+          if (isCapturingHtml.value) {
+            htmlReportContent.value += pendingDelimiter
+          } else {
+            displayText.value += pendingDelimiter
+          }
+          pendingDelimiter = ''
         }
 
         emit('update:reader', null)
@@ -467,8 +483,8 @@ onUnmounted(() => {
 // 检测是否有后端数据推送
 const hasDataReceived = computed(() => {
   // 只有当实际接收到内容时，才认为有数据推送，从而隐藏外部的 bars-scale loading
-  // 如果只是 readerLoading 为 true 但没有内容，继续显示外部 loading
-  return displayText.value.length > 0
+  // 包含 HTML 报告捕获中的情况（可能 displayText 为空但已在接收 HTML）
+  return displayText.value.length > 0 || isCapturingHtml.value || htmlReportReady.value
 })
 
 // 监听数据接收状态变化，通知父组件隐藏 bars-scale
@@ -658,7 +674,7 @@ const currentQaOption = computed(() => {
       <div
         text-16
         class="w-full h-full flex flex-col"
-        :class="[!displayText && 'items-center justify-center overflow-hidden']"
+        :class="[!displayText && !isCapturingHtml && !htmlReportReady && 'items-center justify-center overflow-hidden']"
       >
         <!-- <n-empty v-if="!displayText" size="large" class="font-bold">
                     <template #icon>
