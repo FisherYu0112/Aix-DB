@@ -543,7 +543,9 @@ class DeepAgent:
         current_content_buffer = ""
         current_node = None
 
-        logger.info(f"开始流式响应处理（混合模式） - 任务ID: {task_id}, 查询: {query[:100]}")
+        logger.info(
+            f"开始流式响应处理（混合模式） - 任务ID: {task_id}, 查询: {query[:100]}"
+        )
 
         stream_iter = agent.astream(**stream_args)
         stream_anext = stream_iter.__anext__
@@ -601,7 +603,11 @@ class DeepAgent:
                 idle_duration = current_time - last_message_time
                 if idle_duration > self.STREAM_IDLE_TIMEOUT:
                     elapsed_total = current_time - start_time
-                    stats = self.tool_manager.get_stats(effective_session_id) if effective_session_id else {}
+                    stats = (
+                        self.tool_manager.get_stats(effective_session_id)
+                        if effective_session_id
+                        else {}
+                    )
                     logger.warning(
                         f"流式响应空闲超时 ({self.STREAM_IDLE_TIMEOUT}秒) - "
                         f"空闲时长: {idle_duration:.0f}秒, 总运行: {elapsed_total:.0f}秒, "
@@ -622,7 +628,9 @@ class DeepAgent:
                     if effective_session_id:
                         ctx = self.tool_manager.get_session(effective_session_id)
                         if ctx.should_terminate:
-                            logger.warning(f"messages 模式中检测到终止: {ctx.termination_reason}")
+                            logger.warning(
+                                f"messages 模式中检测到终止: {ctx.termination_reason}"
+                            )
                             await self._safe_write(
                                 response,
                                 f"\n\n> ⚠️ **执行中止**\n\n{ctx.termination_reason}",
@@ -650,7 +658,10 @@ class DeepAgent:
                             # 提取文本内容
                             text_parts = []
                             for part in content:
-                                if isinstance(part, dict) and part.get("type") == "text":
+                                if (
+                                    isinstance(part, dict)
+                                    and part.get("type") == "text"
+                                ):
                                     text_parts.append(part.get("text", ""))
                                 elif isinstance(part, str):
                                     text_parts.append(part)
@@ -693,7 +704,9 @@ class DeepAgent:
                     if effective_session_id:
                         ctx = self.tool_manager.get_session(effective_session_id)
                         if ctx.should_terminate:
-                            logger.warning(f"updates 模式中检测到终止: {ctx.termination_reason}")
+                            logger.warning(
+                                f"updates 模式中检测到终止: {ctx.termination_reason}"
+                            )
                             await self._safe_write(
                                 response,
                                 f"\n\n> ⚠️ **执行中止**\n\n{ctx.termination_reason}",
@@ -732,7 +745,9 @@ class DeepAgent:
 
                                 # 检查消息数量限制
                                 if message_count > self.MAX_MESSAGES:
-                                    logger.warning(f"消息数量超过限制 ({self.MAX_MESSAGES})")
+                                    logger.warning(
+                                        f"消息数量超过限制 ({self.MAX_MESSAGES})"
+                                    )
                                     await self._safe_write(
                                         response,
                                         "\n> ⚠️ **对话过长**: 已达到消息数量上限，请开启新对话。",
@@ -776,15 +791,6 @@ class DeepAgent:
             else:
                 await self._handle_stream_error(response, e)
         finally:
-            # 停止心跳
-            heartbeat_stop.set()
-            if heartbeat_task and not heartbeat_task.done():
-                heartbeat_task.cancel()
-                try:
-                    await heartbeat_task
-                except (asyncio.CancelledError, Exception):
-                    pass
-
             # 保存最后的缓冲内容
             if current_content_buffer:
                 t02_answer_data.append(current_content_buffer)
@@ -900,7 +906,9 @@ class DeepAgent:
             failed_calls = tool_stats.get("failed_calls", 0)
             diag_parts.append(f"- 工具调用: {total_calls} 次（失败 {failed_calls} 次）")
             if tool_stats.get("consecutive_failures", 0) > 3:
-                diag_parts.append(f"- ⚠ 连续失败: {tool_stats['consecutive_failures']} 次")
+                diag_parts.append(
+                    f"- ⚠ 连续失败: {tool_stats['consecutive_failures']} 次"
+                )
 
         diag_section = ""
         if diag_parts:
@@ -953,7 +961,9 @@ class DeepAgent:
 
         if is_timeout:
             logger.error(f"LLM 调用超时: {error_type}: {e}", exc_info=True)
-            await self._handle_timeout(response, "大模型 API 响应超时，可能是公网模型服务繁忙")
+            await self._handle_timeout(
+                response, "大模型 API 响应超时，可能是公网模型服务繁忙"
+            )
         elif is_rate_limit:
             logger.error(f"LLM 限流: {error_type}: {e}", exc_info=True)
             error_content = (
