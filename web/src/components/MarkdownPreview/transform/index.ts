@@ -218,6 +218,10 @@ export const transformStreamValue: Record<
               }
             }
           }
+          // 服务端 SSE 保活事件，不追加任何内容，避免长时间等待时连接被断开
+          if (json.dataType === 'keepalive') {
+            return { content: '' }
+          }
           // 处理自定义格式：{"data":{"messageType":"continue","content":"..."},"dataType":"t02"}
           if (json.dataType === 't02' && json.data && json.data.content !== undefined) {
             return {

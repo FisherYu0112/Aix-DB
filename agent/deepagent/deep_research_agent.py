@@ -79,6 +79,9 @@ class DeepAgent:
     # 注意：reasoning/thinking 模型在思考阶段不输出 token，需要更宽松的超时
     STREAM_IDLE_TIMEOUT = 5 * 60  # 5 分钟无新消息（兼容深度思考模型）
 
+    # SSE 保活间隔（秒）：等待 LLM/工具期间每 N 秒发送一次注释，防止代理/浏览器约 2 分钟无数据断开
+    STREAM_KEEPALIVE_INTERVAL = 25
+
     # 总任务超时（秒）- 与前端 fetch timeout (18分钟) 和 Nginx proxy_read_timeout (1080s) 对齐
     TASK_TIMEOUT = 15 * 60  # 15 分钟
 
@@ -542,8 +545,34 @@ class DeepAgent:
 
         logger.info(f"开始流式响应处理（混合模式） - 任务ID: {task_id}, 查询: {query[:100]}")
 
+        stream_iter = agent.astream(**stream_args)
+        stream_anext = stream_iter.__anext__
+
         try:
-            async for mode, chunk in agent.astream(**stream_args):
+            while True:
+                # 带超时等待下一 chunk，超时则发送 SSE 保活防止代理/浏览器约 2 分钟无数据断开
+                try:
+                    mode, chunk = await asyncio.wait_for(
+                        stream_anext(), timeout=self.STREAM_KEEPALIVE_INTERVAL
+                    )
+                except asyncio.TimeoutError:
+                    try:
+                        # 发送标准 SSE 保活事件，前端解析后忽略（不追加内容）
+                        await response.write(
+                            'data: {"data":{"messageType": "info", "content": ""}, "dataType": "keepalive"}\n\n'
+                        )
+                        if hasattr(response, "flush"):
+                            await response.flush()
+                        last_message_time = time.time()
+                    except Exception as e:
+                        if self._is_connection_error(e):
+                            connection_closed = True
+                            break
+                        raise
+                    continue
+                except StopAsyncIteration:
+                    break
+
                 current_time = time.time()
 
                 # 检查是否已取消
@@ -641,8 +670,13 @@ class DeepAgent:
                             # 累积到缓冲区用于记录
                             current_content_buffer += token_text
 
-                            # 定期刷新
-                            if token_count % 10 == 0 and hasattr(response, "flush"):
+                            # 定期刷新；若内容含报告分隔符则每次刷新，便于前端尽早展示 HTML 报告
+                            do_flush = (
+                                token_count % 10 == 0
+                                or "REPORT_HTML_START" in token_text
+                                or "REPORT_HTML_END" in token_text
+                            )
+                            if do_flush and hasattr(response, "flush"):
                                 try:
                                     await response.flush()
                                 except Exception as e:
