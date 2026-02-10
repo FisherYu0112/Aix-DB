@@ -69,7 +69,7 @@ class ToolCallManager:
     MAX_CONSECUTIVE_FAILURES = 5  # 连续失败的最大次数（原10→5）
     PATTERN_DETECTION_WINDOW = 12  # 模式检测窗口大小（放宽：需要更长序列才判定）
     PATTERN_REPEAT_BEFORE_TERMINATE = 3  # 同一模式需重复检测到此次数才终止（放宽：首次仅警告）
-    SESSION_TIMEOUT = 20 * 60  # 会话超时时间（原30→20分钟，与 TASK_TIMEOUT 对齐）
+    SESSION_TIMEOUT = 35 * 60  # 会话超时时间，需 >= TASK_TIMEOUT(30min)
 
     def __init__(self):
         self._sessions: Dict[str, SessionContext] = {}

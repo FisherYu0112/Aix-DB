@@ -100,7 +100,8 @@ autodiscover(
 app.config.SANIC_WORKER_STATE_TTL = int(os.getenv("SANIC_WORKER_STATE_TTL", 120))
 
 # SSE 流式响应超时设置（DeepAgent 报告生成可能耗时较长）
-app.config.RESPONSE_TIMEOUT = int(os.getenv("SANIC_RESPONSE_TIMEOUT", 1200))  # 20分钟
+# 超时链路：LLM(15min) < TASK(30min) < RESPONSE_TIMEOUT(35min) < 前端 fetch(36min)
+app.config.RESPONSE_TIMEOUT = int(os.getenv("SANIC_RESPONSE_TIMEOUT", 2100))  # 35分钟
 app.config.REQUEST_TIMEOUT = int(os.getenv("SANIC_REQUEST_TIMEOUT", 300))  # 5分钟
 app.config.KEEP_ALIVE_TIMEOUT = int(os.getenv("SANIC_KEEP_ALIVE_TIMEOUT", 120))  # 2分钟
 

@@ -153,7 +153,7 @@ docker run -d \
   -v ./volume/logs/minio:/var/log/minio \
   -v ./volume/logs/postgresql:/var/log/postgresql \
   --add-host host.docker.internal:host-gateway \
-  crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/aix-db:1.2.2
+  crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/aix-db:1.2.3
 ```
 
 ### 使用 Docker Compose

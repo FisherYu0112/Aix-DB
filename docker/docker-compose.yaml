@@ -1,6 +1,6 @@
 services:
   aix-db:
-    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/aix-db:1.2.2
+    image: crpi-7xkxsdc0iki61l0q.cn-hangzhou.personal.cr.aliyuncs.com/apconw/aix-db:1.2.3
     container_name: aix-db
     restart: unless-stopped
     environment:

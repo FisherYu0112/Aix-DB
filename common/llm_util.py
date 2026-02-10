@@ -6,10 +6,10 @@ from model.db_models import TAiModel
 
 pool = get_db_pool()
 
-# 默认超时时间：10分钟（600秒）
+# 默认超时时间:30分钟
 # 与 deep_research_agent.py 的 DEFAULT_LLM_TIMEOUT 保持一致
-# 前端 fetch timeout 为 18 分钟，Nginx proxy_read_timeout 为 1080s，此值应小于两者
-DEFAULT_LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 10 * 60))
+# 超时链路：LLM(15min) < TASK(30min) < Sanic RESPONSE(35min) < 前端 fetch(36min)
+DEFAULT_LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 30 * 60))
 
 
 def get_llm(temperature=0.75, timeout=None):
@@ -21,10 +21,11 @@ def get_llm(temperature=0.75, timeout=None):
     """
     with pool.get_session() as session:
         # Fetch default model
-        model = session.query(TAiModel).filter(
-            TAiModel.default_model == True,
-            TAiModel.model_type == 1
-        ).first()
+        model = (
+            session.query(TAiModel)
+            .filter(TAiModel.default_model == True, TAiModel.model_type == 1)
+            .first()
+        )
         if not model:
             raise ValueError("No default AI model configured in database.")
 
@@ -68,7 +69,9 @@ def get_llm(temperature=0.75, timeout=None):
                 from langchain_openai import ChatOpenAI
             except Exception as e:
                 # 这里打印日志而不是在导入阶段崩溃
-                print(f"[ERROR] Failed to import ChatOpenAI, please check langchain-openai/langsmith/opentelemetry installation: {e}")
+                print(
+                    f"[ERROR] Failed to import ChatOpenAI, please check langchain-openai/langsmith/opentelemetry installation: {e}"
+                )
                 raise
 
             return ChatOpenAI(
@@ -86,7 +89,9 @@ def get_llm(temperature=0.75, timeout=None):
             try:
                 from langchain_ollama import ChatOllama
             except Exception as e:
-                print(f"[WARN] Failed to import ChatOllama, fallback to ChatOpenAI: {e}")
+                print(
+                    f"[WARN] Failed to import ChatOllama, fallback to ChatOpenAI: {e}"
+                )
                 return _get_openai()
 
             return ChatOllama(
