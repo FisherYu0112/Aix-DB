@@ -121,14 +121,15 @@ class DeepAgent:
     # 递归限制：子代理也消耗递归次数，150 足够完成复杂任务同时防止无限循环
     DEFAULT_RECURSION_LIMIT = 150
 
-    # LLM 超时（秒）- 公网大模型高峰期可能需要较长时间
-    DEFAULT_LLM_TIMEOUT = 10 * 60
+    # LLM 单次请求超时（秒）- 公网大模型高峰期或生成长报告时需要较长时间
+    DEFAULT_LLM_TIMEOUT = 15 * 60
 
     # SSE 保活间隔（秒）：防止代理/浏览器约 2 分钟无数据断开
     STREAM_KEEPALIVE_INTERVAL = 25
 
-    # 总任务超时（秒）- 与前端 fetch timeout 和 Nginx proxy_read_timeout 对齐
-    TASK_TIMEOUT = 15 * 60
+    # 总任务超时（秒）- 复杂报告生成可能需要较长时间
+    # 需与前端 fetch timeout 和 Nginx proxy_read_timeout 对齐
+    TASK_TIMEOUT = 30 * 60
 
     def __init__(self):
         self.tool_manager = get_tool_call_manager()

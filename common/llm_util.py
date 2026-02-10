@@ -6,10 +6,10 @@ from model.db_models import TAiModel
 
 pool = get_db_pool()
 
-# 默认超时时间：10分钟（600秒）
+# 默认超时时间：15分钟（900秒）
 # 与 deep_research_agent.py 的 DEFAULT_LLM_TIMEOUT 保持一致
-# 前端 fetch timeout 为 18 分钟，Nginx proxy_read_timeout 为 1080s，此值应小于两者
-DEFAULT_LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 10 * 60))
+# 超时链路：LLM(15min) < TASK(30min) < Sanic RESPONSE(35min) < 前端 fetch(36min)
+DEFAULT_LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", 15 * 60))
 
 
 def get_llm(temperature=0.75, timeout=None):
