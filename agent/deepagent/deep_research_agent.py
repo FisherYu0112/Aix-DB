@@ -41,10 +41,10 @@ from common.datasource_util import (
     DatasourceConnectionUtil,
 )
 from common.llm_util import get_llm
-from constants.code_enum import DataTypeEnum
+from constants.code_enum import DataTypeEnum, IntentEnum
 from model.db_connection_pool import get_db_pool
 from services.datasource_service import DatasourceService
-from services.user_service import decode_jwt_token
+from services.user_service import add_user_record, decode_jwt_token
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +458,8 @@ class DeepAgent:
 
         start_time = time.time()
         connection_closed = False
+        # 收集所有输出内容，流结束后写入 t_user_qa_record
+        answer_collector: list[str] = []
 
         try:
             agent = self._create_sql_deep_agent(datasource_id, effective_session_id)
@@ -470,7 +472,8 @@ class DeepAgent:
             try:
                 connection_closed = await asyncio.wait_for(
                     self._stream_response(
-                        agent, config, query, response, effective_session_id
+                        agent, config, query, response, effective_session_id,
+                        answer_collector,
                     ),
                     timeout=self.TASK_TIMEOUT,
                 )
@@ -508,6 +511,35 @@ class DeepAgent:
                 except Exception:
                     pass
         finally:
+            # 写入对话记录到 t_user_qa_record
+            try:
+                if answer_collector:
+                    record_id = await add_user_record(
+                        uuid_str=uuid_str or "",
+                        chat_id=session_id,
+                        question=query,
+                        to2_answer=answer_collector,
+                        to4_answer={},
+                        qa_type=IntentEnum.DATABASE_QA.value[0],
+                        user_token=user_token,
+                        file_list=file_list,
+                        datasource_id=datasource_id,
+                    )
+                    logger.info(
+                        f"对话记录已保存 - record_id: {record_id}, "
+                        f"会话: {effective_session_id}, 内容长度: {sum(len(s) for s in answer_collector)}"
+                    )
+                    # 发送 record_id 到前端
+                    if record_id and not connection_closed:
+                        await self._safe_write(
+                            response,
+                            json.dumps({"record_id": record_id}),
+                            "continue",
+                            DataTypeEnum.RECORD_ID.value[0],
+                        )
+            except Exception as e:
+                logger.error(f"保存对话记录失败: {e}", exc_info=True)
+
             # 发送流结束标记
             if not connection_closed:
                 try:
@@ -533,6 +565,7 @@ class DeepAgent:
         query: str,
         response,
         session_id: str,
+        answer_collector: list,
     ) -> bool:
         """
         处理 agent 流式响应，多阶段实时推送到前端
@@ -545,6 +578,9 @@ class DeepAgent:
         SUB_AGENT（子代理，带标签 <details>）
             ↓ 完成
         EXECUTION / REPORTING（回答或报告输出）
+
+        Args:
+            answer_collector: 收集所有输出内容的列表，流结束后用于写入数据库
 
         Returns:
             bool: 连接是否已断开（True=断开）
@@ -635,11 +671,12 @@ class DeepAgent:
                             connection_closed = True
                             break
 
-                    # 输出 token
+                    # 输出 token 并收集到 answer_collector
                     if not await self._safe_write(response, token_text):
                         connection_closed = True
                         break
 
+                    answer_collector.append(token_text)
                     token_count += 1
 
                     # 刷新策略：每 10 token 或遇到 HTML 报告标记时刷新
@@ -684,7 +721,9 @@ class DeepAgent:
                             messages = [messages]
 
                         for msg in messages:
-                            if not await self._process_update_message(msg, response):
+                            if not await self._process_update_message(
+                                msg, response, answer_collector
+                            ):
                                 connection_closed = True
                                 break
 
@@ -782,9 +821,14 @@ class DeepAgent:
         logger.debug(f"阶段切换: {old_phase.value} → {new_phase.value}")
         return True
 
-    async def _process_update_message(self, msg, response) -> bool:
+    async def _process_update_message(
+        self, msg, response, answer_collector: list
+    ) -> bool:
         """
         处理 updates 模式下的单条消息（工具调用/结果）
+
+        Args:
+            answer_collector: 收集所有输出内容的列表
 
         Returns:
             bool: True=成功, False=连接断开
@@ -803,6 +847,7 @@ class DeepAgent:
                                 response, tool_msg, "info"
                             ):
                                 return False
+                            answer_collector.append(tool_msg)
 
             elif isinstance(msg, ToolMessage):
                 name = getattr(msg, "name", "")
@@ -816,6 +861,7 @@ class DeepAgent:
                         response, tool_result_msg, msg_type
                     ):
                         return False
+                    answer_collector.append(tool_result_msg)
 
             return True
         except Exception as e:
