@@ -1,10 +1,12 @@
 """
-Deep Research Agent - 基于 DeepAgents 的 Text-to-SQL 智能体
+Deep Research Agent - 基于 DeepAgents 的多阶段 Text-to-SQL 智能体
 
-精简实时流推送架构：
+架构特性：
 1. 保留 create_deep_agent 核心架构
-2. 实时 SSE 流推送，用户感知每一步执行过程
-3. 不保存对话历史记录
+2. 多阶段执行：思考规划 → 执行 → 回答/报告
+3. 实时 SSE 流推送，思考过程用 <details> 包裹，内容直接输出
+4. 多智能体协作可见性（子代理活动带标签展示）
+5. 不保存对话历史记录
 """
 
 import asyncio
@@ -13,6 +15,8 @@ import logging
 import os
 import time
 import traceback
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
 
 from deepagents import create_deep_agent
@@ -47,8 +51,72 @@ logger = logging.getLogger(__name__)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
+# ==================== 阶段枚举与追踪 ====================
+
+
+class Phase(Enum):
+    """Agent 执行阶段"""
+
+    PLANNING = "planning"  # 思考规划（首次工具调用前的输出）
+    EXECUTION = "execution"  # 执行回答（默认阶段）
+    SUB_AGENT = "sub_agent"  # 子代理运行中
+    REPORTING = "reporting"  # 报告生成（HTML 标记透传）
+
+
+@dataclass
+class PhaseTracker:
+    """
+    阶段追踪器：管理 <details> 标签的开关状态
+
+    核心职责：
+    - 追踪当前执行阶段
+    - 管理 <details> 区域的打开/关闭
+    - 判断是否已进入正式内容阶段
+    """
+
+    current_phase: Phase = Phase.PLANNING  # 初始为规划阶段
+    planning_opened: bool = False  # 思考区 <details> 是否已打开
+    subagent_opened: bool = False  # 子代理区 <details> 是否已打开
+    current_node: str = ""  # 当前 langgraph 节点名
+    has_tool_called: bool = False  # 是否已发生过工具调用
+    has_sent_content: bool = False  # 是否已输出过正式内容
+
+
+# ==================== 子代理标签映射 ====================
+
+SUB_AGENT_LABELS = {
+    "task": "子代理任务",
+    "report-generation": "报告生成",
+    "query-writing": "SQL 查询",
+    "schema-exploration": "架构探索",
+}
+
+# ==================== <details> 标签模板 ====================
+
+THINKING_SECTION_OPEN = (
+    '<details open style="margin:8px 0;padding:8px 12px;background:#f8f9fa;'
+    "border-left:3px solid #4a90d9;border-radius:4px;font-size:14px;color:#555"
+    '">\n'
+    '<summary style="cursor:pointer;font-weight:600;color:#333">'
+    "🧠 思考与规划</summary>\n\n"
+)
+
+SUBAGENT_SECTION_OPEN_TPL = (
+    '<details open style="margin:8px 0;padding:8px 12px;background:#fff8e6;'
+    "border-left:3px solid #f0a020;border-radius:4px;font-size:14px;color:#555"
+    '">\n'
+    '<summary style="cursor:pointer;font-weight:600;color:#333">'
+    "🤖 {label}</summary>\n\n"
+)
+
+SECTION_CLOSE = "\n</details>\n\n"
+
+
+# ==================== DeepAgent 主类 ====================
+
+
 class DeepAgent:
-    """基于 DeepAgents 的 Text-to-SQL 智能体，实时流推送架构"""
+    """基于 DeepAgents 的多阶段 Text-to-SQL 智能体"""
 
     # 递归限制：子代理也消耗递归次数，150 足够完成复杂任务同时防止无限循环
     DEFAULT_RECURSION_LIMIT = 150
@@ -199,6 +267,9 @@ class DeepAgent:
             return "📋 **Listing Tables...**\n\n"
         elif name == "sql_db_query_checker":
             return "✅ **Validating Query...**\n\n"
+        elif name == "sql_db_table_relationship":
+            table_names = args.get("table_names", "")
+            return f"🔗 **Checking Relationships:** `{table_names}`\n\n"
         return None
 
     @staticmethod
@@ -210,6 +281,75 @@ class DeepAgent:
             else:
                 return f"✗ **Query failed:** {content[:300].strip()}\n\n"
         return None
+
+    @staticmethod
+    def _extract_text(content) -> str:
+        """从消息内容中提取文本（兼容字符串和列表格式）"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return "".join(parts)
+        return str(content) if content else ""
+
+    # ==================== 阶段检测与 <details> 管理 ====================
+
+    @staticmethod
+    def _detect_phase(
+        node_name: str, content: str, tracker: PhaseTracker
+    ) -> Phase:
+        """
+        基于 langgraph_node 元数据和内容检测当前阶段
+
+        规则（优先级从高到低）：
+        1. node_name 包含 "task" → SUB_AGENT
+        2. content 包含 REPORT_HTML 标记 → REPORTING
+        3. 尚未发生工具调用 → PLANNING（首次思考阶段）
+        4. 默认 → EXECUTION
+        """
+        # 子代理检测
+        if "task" in node_name.lower():
+            return Phase.SUB_AGENT
+
+        # 报告标记检测
+        if "REPORT_HTML_START" in content or "REPORT_HTML_END" in content:
+            return Phase.REPORTING
+
+        # 首次工具调用前的输出视为思考规划
+        if not tracker.has_tool_called:
+            return Phase.PLANNING
+
+        # 默认执行阶段
+        return Phase.EXECUTION
+
+    async def _open_thinking_section(self, response) -> bool:
+        """打开思考规划 <details> 区域"""
+        return await self._safe_write(response, THINKING_SECTION_OPEN)
+
+    async def _open_subagent_section(
+        self, response, node_name: str
+    ) -> bool:
+        """打开子代理 <details> 区域"""
+        label = SUB_AGENT_LABELS.get(node_name, f"子代理: {node_name}")
+        html = SUBAGENT_SECTION_OPEN_TPL.format(label=label)
+        return await self._safe_write(response, html)
+
+    async def _close_sections(self, response, tracker: PhaseTracker) -> bool:
+        """关闭所有已打开的 <details> 区域"""
+        if tracker.planning_opened:
+            if not await self._safe_write(response, SECTION_CLOSE):
+                return False
+            tracker.planning_opened = False
+        if tracker.subagent_opened:
+            if not await self._safe_write(response, SECTION_CLOSE):
+                return False
+            tracker.subagent_opened = False
+        return True
 
     # ==================== Agent 创建 ====================
 
@@ -253,7 +393,10 @@ class DeepAgent:
                     f"数据源 {datasource_id} ({datasource.type}) 使用原生驱动连接"
                 )
                 set_native_datasource_info(
-                    datasource_id, datasource.type, datasource.configuration, session_id
+                    datasource_id,
+                    datasource.type,
+                    datasource.configuration,
+                    session_id,
                 )
                 sql_tools = [
                     sql_db_list_tables,
@@ -285,15 +428,15 @@ class DeepAgent:
         datasource_id: int = None,
     ):
         """
-        运行智能体，实时流推送执行过程
+        运行智能体，多阶段实时流推送
 
         Args:
             query: 用户输入
             response: SSE 响应对象
             session_id: 会话ID
-            uuid_str: 唯一标识（兼容参数，不再使用）
+            uuid_str: 唯一标识（兼容参数）
             user_token: 用户令牌
-            file_list: 附件（兼容参数，不再使用）
+            file_list: 附件（兼容参数）
             datasource_id: 数据源ID
         """
         if not datasource_id:
@@ -381,6 +524,8 @@ class DeepAgent:
                 f"耗时: {elapsed:.2f}秒, 工具调用统计: {stats}"
             )
 
+    # ==================== 核心流处理 ====================
+
     async def _stream_response(
         self,
         agent,
@@ -390,11 +535,21 @@ class DeepAgent:
         session_id: str,
     ) -> bool:
         """
-        处理 agent 流式响应，实时推送到前端
+        处理 agent 流式响应，多阶段实时推送到前端
+
+        执行阶段流转：
+        PLANNING（思考规划，<details> 包裹）
+            ↓ 首次工具调用
+        EXECUTION（执行回答，直接输出）
+            ↕ 子代理触发
+        SUB_AGENT（子代理，带标签 <details>）
+            ↓ 完成
+        EXECUTION / REPORTING（回答或报告输出）
 
         Returns:
             bool: 连接是否已断开（True=断开）
         """
+        tracker = PhaseTracker()
         token_count = 0
         connection_closed = False
 
@@ -409,7 +564,7 @@ class DeepAgent:
 
         try:
             while True:
-                # 带超时等待下一 chunk，超时则发送 SSE 保活
+                # ---- 1. 等待下一 chunk（带 keepalive 超时）----
                 try:
                     mode, chunk = await asyncio.wait_for(
                         stream_anext(), timeout=self.STREAM_KEEPALIVE_INTERVAL
@@ -417,7 +572,8 @@ class DeepAgent:
                 except asyncio.TimeoutError:
                     try:
                         await response.write(
-                            'data: {"data":{"messageType": "info", "content": ""}, "dataType": "keepalive"}\n\n'
+                            'data: {"data":{"messageType": "info", "content": ""}, '
+                            '"dataType": "keepalive"}\n\n'
                         )
                         if hasattr(response, "flush"):
                             await response.flush()
@@ -430,10 +586,14 @@ class DeepAgent:
                 except StopAsyncIteration:
                     break
 
-                # 检查工具调用管理器是否触发终止
+                # ---- 2. 检查工具调用管理器终止 ----
                 ctx = self.tool_manager.get_session(session_id)
                 if ctx.should_terminate:
-                    logger.warning(f"工具调用管理器触发终止: {ctx.termination_reason}")
+                    logger.warning(
+                        f"工具调用管理器触发终止: {ctx.termination_reason}"
+                    )
+                    # 先关闭所有 <details> 区域
+                    await self._close_sections(response, tracker)
                     await self._safe_write(
                         response,
                         f"\n> ⚠️ **执行中止**\n\n{ctx.termination_reason}",
@@ -442,7 +602,7 @@ class DeepAgent:
                     )
                     break
 
-                # ---- messages 模式：token 级别实时流式输出 ----
+                # ---- 3. messages 模式：token 级实时流式输出 ----
                 if mode == "messages":
                     message_chunk, metadata = chunk
                     node_name = metadata.get("langgraph_node", "")
@@ -453,29 +613,63 @@ class DeepAgent:
                     if node_name == "tools":
                         continue
 
-                    if hasattr(message_chunk, "content") and message_chunk.content:
-                        token_text = self._extract_text(message_chunk.content)
-                        if token_text:
-                            token_count += 1
-                            if not await self._safe_write(response, token_text):
-                                connection_closed = True
-                                break
+                    if not (
+                        hasattr(message_chunk, "content") and message_chunk.content
+                    ):
+                        continue
 
-                            # 含报告分隔符时立即刷新，便于前端尽早展示 HTML
-                            if token_count % 10 == 0 or "REPORT_HTML_" in token_text:
-                                if hasattr(response, "flush"):
-                                    try:
-                                        await response.flush()
-                                    except Exception as e:
-                                        if self._is_connection_error(e):
-                                            connection_closed = True
-                                            break
-                                        raise
+                    token_text = self._extract_text(message_chunk.content)
+                    if not token_text:
+                        continue
 
-                            await asyncio.sleep(0)
+                    # 阶段检测
+                    new_phase = self._detect_phase(node_name, token_text, tracker)
+                    tracker.current_node = node_name
 
-                # ---- updates 模式：工具调用与结果 ----
+                    # 阶段切换处理
+                    if new_phase != tracker.current_phase:
+                        closed = await self._handle_phase_transition(
+                            response, tracker, new_phase, node_name
+                        )
+                        if not closed:
+                            connection_closed = True
+                            break
+
+                    # 输出 token
+                    if not await self._safe_write(response, token_text):
+                        connection_closed = True
+                        break
+
+                    token_count += 1
+
+                    # 刷新策略：每 10 token 或遇到 HTML 报告标记时刷新
+                    if token_count % 10 == 0 or "REPORT_HTML_" in token_text:
+                        if hasattr(response, "flush"):
+                            try:
+                                await response.flush()
+                            except Exception as e:
+                                if self._is_connection_error(e):
+                                    connection_closed = True
+                                    break
+                                raise
+
+                    await asyncio.sleep(0)
+
+                # ---- 4. updates 模式：工具调用与结果 ----
                 elif mode == "updates":
+                    # 工具调用开始：从 PLANNING 切换到 EXECUTION
+                    if tracker.current_phase == Phase.PLANNING:
+                        if not await self._close_sections(response, tracker):
+                            connection_closed = True
+                            break
+                        tracker.current_phase = Phase.EXECUTION
+                        tracker.has_tool_called = True
+                        tracker.has_sent_content = True
+
+                    # 标记已发生工具调用
+                    if not tracker.has_tool_called:
+                        tracker.has_tool_called = True
+
                     for node_name, node_output in chunk.items():
                         if connection_closed:
                             break
@@ -516,8 +710,12 @@ class DeepAgent:
                 logger.info(f"客户端连接已断开: {type(e).__name__}")
                 connection_closed = True
             else:
-                logger.error(f"流式响应异常: {type(e).__name__}: {e}", exc_info=True)
+                logger.error(
+                    f"流式响应异常: {type(e).__name__}: {e}", exc_info=True
+                )
                 try:
+                    # 先关闭打开的 <details>
+                    await self._close_sections(response, tracker)
                     await self._safe_write(
                         response,
                         f"\n> ❌ **处理异常**: {str(e)[:200]}\n\n请稍后重试。",
@@ -526,13 +724,67 @@ class DeepAgent:
                     )
                 except Exception:
                     pass
+        finally:
+            # 确保关闭所有打开的 <details> 区域
+            if not connection_closed:
+                try:
+                    await self._close_sections(response, tracker)
+                except Exception:
+                    pass
 
-        logger.info(f"流式响应结束 - 会话: {session_id}, token数: {token_count}")
+        logger.info(
+            f"流式响应结束 - 会话: {session_id}, "
+            f"token数: {token_count}, 阶段: {tracker.current_phase.value}"
+        )
         return connection_closed
+
+    async def _handle_phase_transition(
+        self,
+        response,
+        tracker: PhaseTracker,
+        new_phase: Phase,
+        node_name: str,
+    ) -> bool:
+        """
+        处理阶段切换，管理 <details> 标签的打开/关闭
+
+        Returns:
+            bool: True=成功, False=连接断开
+        """
+        old_phase = tracker.current_phase
+
+        if new_phase == Phase.PLANNING:
+            if not tracker.planning_opened:
+                if not await self._open_thinking_section(response):
+                    return False
+                tracker.planning_opened = True
+
+        elif new_phase == Phase.SUB_AGENT:
+            # 先关闭之前的区域
+            if not await self._close_sections(response, tracker):
+                return False
+            if not await self._open_subagent_section(response, node_name):
+                return False
+            tracker.subagent_opened = True
+
+        elif new_phase == Phase.EXECUTION:
+            # 关闭思考区/子代理区，进入正式内容
+            if not await self._close_sections(response, tracker):
+                return False
+            tracker.has_sent_content = True
+
+        elif new_phase == Phase.REPORTING:
+            # 报告阶段：先关闭所有区域，HTML 标记直接透传
+            if not await self._close_sections(response, tracker):
+                return False
+
+        tracker.current_phase = new_phase
+        logger.debug(f"阶段切换: {old_phase.value} → {new_phase.value}")
+        return True
 
     async def _process_update_message(self, msg, response) -> bool:
         """
-        处理 updates 模式下的单条消息
+        处理 updates 模式下的单条消息（工具调用/结果）
 
         Returns:
             bool: True=成功, False=连接断开
@@ -547,7 +799,9 @@ class DeepAgent:
                         if tool_msg:
                             if not await self._safe_write(response, "\n\n"):
                                 return False
-                            if not await self._safe_write(response, tool_msg, "info"):
+                            if not await self._safe_write(
+                                response, tool_msg, "info"
+                            ):
                                 return False
 
             elif isinstance(msg, ToolMessage):
@@ -555,8 +809,12 @@ class DeepAgent:
                 content_str = str(msg.content) if msg.content else ""
                 tool_result_msg = self._format_tool_result(name, content_str)
                 if tool_result_msg:
-                    msg_type = "error" if "error" in content_str.lower() else "info"
-                    if not await self._safe_write(response, tool_result_msg, msg_type):
+                    msg_type = (
+                        "error" if "error" in content_str.lower() else "info"
+                    )
+                    if not await self._safe_write(
+                        response, tool_result_msg, msg_type
+                    ):
                         return False
 
             return True
@@ -566,26 +824,9 @@ class DeepAgent:
                 return False
             raise
 
-    @staticmethod
-    def _extract_text(content) -> str:
-        """从消息内容中提取文本（兼容字符串和列表格式）"""
-        if isinstance(content, str):
-            return content
-        elif isinstance(content, list):
-            parts = []
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    parts.append(part.get("text", ""))
-                elif isinstance(part, str):
-                    parts.append(part)
-            return "".join(parts)
-        return str(content) if content else ""
-
     # ==================== 兼容接口 ====================
 
     async def cancel_task(self, task_id: str) -> bool:
         """取消任务（兼容接口，供 llm_service 调用）"""
-        # 简化实现：通过工具管理器标记终止
-        # task_id 在新架构中不再直接跟踪，但可通过工具管理器间接终止
         logger.info(f"收到取消请求: {task_id}")
         return False
