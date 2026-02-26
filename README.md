@@ -268,13 +268,12 @@ npm run dev
 <tr>
 <td width="100%">
 
-<div align="center" style="max-width: 560px; margin: 0 auto; border: 1px solid #d0d7de; border-radius: 12px; padding: 24px; background: #f6f8fa; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+<div align="center" style="max-width: 560px; margin: 0 auto; border: 1px solid #d0d7de; border-radius: 12px; padding: 24px; background: #f8f7f5; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
 
 <span style="font-size: 1.05em; color: #1f2328; font-weight: 600;">🚀 仅承接完整交付，不接零散咨询</span>
 
 <div style="margin-top: 6px; font-size: 0.9em; color: #424a53;">开源维护不易，为保障交付质量，服务聚焦于「部署 + 定制 + 资料」一站式落地</div>
 
----
 
 <table width="100%" style="margin: 12px 0; border-collapse: collapse; color: #1f2328;">
 <tr>
@@ -300,7 +299,6 @@ npm run dev
 
 <div style="text-align: center; font-size: 0.9em; color: #424a53;">含：远程部署、简单定制开发、完整资料包、二开指导、<strong style="color: #1f2328;">一年运维支持</strong></div>
 
----
 
 <div align="center" style="margin-top: 16px; color: #1f2328;">
 <strong>联系作者</strong>：微信 <code style="background: #ebecf0; color: #1f2328; padding: 4px 10px; border-radius: 6px; font-size: 1em; border: 1px solid #d0d7de;">weber812</code><br/>
