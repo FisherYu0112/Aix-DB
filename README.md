@@ -264,20 +264,54 @@ npm run dev
 
 ## 项目私有化部署服务
 
-> **仅承接完整交付，不接零散咨询。**
-> 开源维护不易，为保障交付质量，服务聚焦于「部署 + 定制 + 资料」一站式落地。
+<table>
+<tr>
+<td width="100%">
 
-**服务内容**
+<div align="center" style="max-width: 560px; margin: 0 auto; border: 1px solid #d0d7de; border-radius: 12px; padding: 24px; background: #f6f8fa; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
 
-- **部署**：在您指定环境中完成部署并跑通，无需自行排查环境与配置
-- **定制**：根据需求做简单功能定制与集成
-- **资料**：交付部署文档、配置说明及二开/运维指导
+<span style="font-size: 1.05em; color: #1f2328; font-weight: 600;">🚀 仅承接完整交付，不接零散咨询</span>
 
-**服务报价**：**¥5,000**（一口价）
+<div style="margin-top: 6px; font-size: 0.9em; color: #424a53;">开源维护不易，为保障交付质量，服务聚焦于「部署 + 定制 + 资料」一站式落地</div>
 
-- 含：远程部署、简单定制开发、完整资料包、二开指导、**一年运维支持**
+---
 
-**联系作者**：微信 **weber812**（添加时请备注：**项目部署**）
+<table width="100%" style="margin: 12px 0; border-collapse: collapse; color: #1f2328;">
+<tr>
+<td width="33%" align="center" style="padding: 12px; border-right: 1px solid #d0d7de;">
+<strong style="color: #1f2328;">📦 部署</strong><br/>
+<span style="font-size: 0.85em; color: #424a53;">指定环境部署并跑通，无需自行排查</span>
+</td>
+<td width="33%" align="center" style="padding: 12px; border-right: 1px solid #d0d7de;">
+<strong style="color: #1f2328;">🔧 定制</strong><br/>
+<span style="font-size: 0.85em; color: #424a53;">简单功能定制与集成</span>
+</td>
+<td width="34%" align="center" style="padding: 12px;">
+<strong style="color: #1f2328;">📄 资料</strong><br/>
+<span style="font-size: 0.85em; color: #424a53;">部署文档、配置说明、二开/运维指导</span>
+</td>
+</tr>
+</table>
+
+<div style="text-align: center; margin: 16px 0;">
+<strong style="font-size: 1.1em; color: #1f2328;">服务报价</strong><br/>
+<span style="font-size: 1.4em; color: #0969da; font-weight: 700;">¥5,000</span> <span style="font-size: 0.9em; color: #424a53;">（一口价）</span>
+</div>
+
+<div style="text-align: center; font-size: 0.9em; color: #424a53;">含：远程部署、简单定制开发、完整资料包、二开指导、<strong style="color: #1f2328;">一年运维支持</strong></div>
+
+---
+
+<div align="center" style="margin-top: 16px; color: #1f2328;">
+<strong>联系作者</strong>：微信 <code style="background: #ebecf0; color: #1f2328; padding: 4px 10px; border-radius: 6px; font-size: 1em; border: 1px solid #d0d7de;">weber812</code><br/>
+<span style="font-size: 0.9em; color: #424a53;">添加时请备注：<b>项目部署</b></span>
+</div>
+
+</div>
+
+</td>
+</tr>
+</table>
 
 
 ## Star History
